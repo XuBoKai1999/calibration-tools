@@ -16,23 +16,40 @@
 - 不建立重複的 source of truth。
 - `arch.md` 是架構依據；本文件只規定實作順序。
 
+責任放置原則：
+
+- 功能第一次出現時，放入責任最直接的位置：Calendar UI 放在 calendar page、history UI 放在 history page、Case load/save 放在 Case storage、uncertainty calculation 放在 uncertainty module、report generation 放在 report module。
+- 一個 module 開始同時承擔兩個以上明顯不同責任時再拆分。
+- GUI 只操作與顯示，不自行實作 JSON / CSV serialization 或計算邏輯。
+- 依賴方向保持為 `GUI → application/domain logic → file/config storage`；storage 與計算 module 不得 import GUI。
+- 不因架構外觀而預建 `controllers/`、`services/`、`repositories/`、`factories/`、`interfaces/`、`domain/`、`infrastructure/` 等目前沒有實際責任的目錄。
+
 ---
 
 ## 2. Step 1：建立最小專案骨架
 
 先建立可執行的 PySide6 專案。
 
-最低需要：
+第一階段至少應依現有頁面做到：
 
 ```text
 main.py
-src/
-config/
-data/
+src/calibration_manager/
+├── settings.py
+└── gui/
+    ├── main_window.py
+    └── pages/
+        ├── home_page.py
+        ├── calendar_page.py
+        └── history_page.py
 tests/
 ```
 
-若目前尚無實際內容，不要先建立大量空 module 或空資料夾。
+`main.py` 只作 bootstrap，不作主要 application implementation。它只建立 application、少量 application-level dependency、主視窗並啟動 event loop。
+
+每個實際存在的主要頁面負責自己的 layout、widgets 與 UI interaction；`MainWindow` 只負責主框架、頁面切換與 application-level UI state。
+
+若目前尚無實際內容，不要先建立空的 Case、system、uncertainty、report module 或資料夾。
 
 ### 完成條件
 
@@ -76,7 +93,7 @@ python main.py
 
 - GUI scale 保留。
 - 視窗大小與位置保留。
-- 80%～150% scale 下主要畫面仍可正常操作。
+- 80%～150% scale 下主要畫面仍可正常操作，且需要時可繼續放大。
 
 ---
 
@@ -150,6 +167,8 @@ E27
 
 不要先建立複雜 inheritance hierarchy。
 
+Case model 與 Case load/save 必須和 GUI 分開。初期內容不多時可集中在一個 `cases.py`；GUI callback 不得自行組裝或序列化 Case JSON。內容明顯成長後，才依 model、storage、validation 的責任拆分。
+
 ### Case folder
 
 建立案件時產生：
@@ -192,6 +211,8 @@ uncertainty_template.json
 程式能依 Case 的 `system` 載入對應設定。
 
 主程式不應寫死 E05 / E07 / E27 的技術規則。
+
+程式使用單一、簡單的 `systems.py` 讀取入口即可；此時不要建立 E05 / E07 / E27 Manager class。
 
 ---
 
@@ -398,6 +419,8 @@ previous report
 
 計算邏輯寫 Python。
 
+計算邏輯放在獨立 uncertainty module，且不得 import GUI。
+
 JSON 只保存輸入與設定，不塞複雜公式語言。
 
 ### 完成條件
@@ -409,6 +432,8 @@ JSON 只保存輸入與設定，不塞複雜公式語言。
 ## 13. Step 12：Report generation
 
 最後才建立報告生成。
+
+報告生成放在獨立 report module，GUI 只收集操作意圖並顯示結果。
 
 輸入：
 
@@ -474,6 +499,10 @@ Codex 每完成一個 Step，都應先：
 若開始出現重複邏輯或清楚的獨立責任：
 
 > 再考慮抽出 class 或 module。
+
+若拆分只是把幾行程式換位置、只有一個 caller 且沒有獨立概念，或必須靠 Manager / Service / Repository 才能解釋：
+
+> 不拆分。
 
 優先確保：
 

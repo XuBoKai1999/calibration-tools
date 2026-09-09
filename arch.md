@@ -93,7 +93,97 @@ History         → Optional Copy → Case
 
 ---
 
-## 3. GUI
+## 3. 程式架構
+
+程式依明確責任拆分，不以「少增實體」為理由把不同層級的工作集中在單一檔案，也不為尚未存在的功能預建企業式架構。
+
+目前實際結構：
+
+```text
+main.py
+src/calibration_manager/
+├── settings.py
+└── gui/
+    ├── main_window.py
+    └── pages/
+        ├── home_page.py
+        ├── calendar_page.py
+        └── history_page.py
+```
+
+`cases.py`、`systems.py`、`case_page.py` 等檔案應在對應功能首次實作時才建立，不先建立空檔案。
+
+### 3.1 `main.py`
+
+`main.py` 保持為薄的 application bootstrap，只負責：
+
+- 建立 `QApplication`。
+- 初始化少量 application-level dependency。
+- 載入必要設定。
+- 建立主視窗。
+- 啟動 event loop。
+
+其內容應接近：
+
+```python
+def main():
+    app = QApplication(...)
+    settings = QSettings(...)
+    window = MainWindow(settings)
+    window.show()
+    return app.exec()
+```
+
+`main.py` 不負責：
+
+- Case JSON 或 CSV 讀寫。
+- uncertainty 計算、pricing 或 report generation。
+- calendar business logic。
+- 大量 widget 定義或各頁面 UI implementation。
+
+### 3.2 GUI
+
+`MainWindow` 負責 application 主框架、頁面切換、window geometry、GUI scale 與 application-level UI state。不要把每個頁面的具體 widget 全部放進 `MainWindow`。
+
+每個主要 Page 負責自己的 layout、widgets 與頁面內 UI interaction。Page 可發出操作意圖，但不直接實作大量檔案 I/O、資料序列化、uncertainty 或 pricing 計算。
+
+現有頁面各自放在 `gui/pages/`。Case 頁面真正開始實作時才新增 `case_page.py`；目前不為其各 tab 預建空 class。
+
+### 3.3 Model、storage 與 GUI
+
+Case 功能出現時，最低責任分離為：
+
+```text
+model → 描述 Case 資料
+storage → Case folder 與 JSON / CSV load、save
+GUI → 輸入、操作與顯示
+```
+
+初期可將 Case model 與 storage 集中在 `src/calibration_manager/cases.py`。只有當它開始同時包含大量 model、storage 或 validation 邏輯時，再拆成 `cases/model.py`、`cases/storage.py`、`cases/validation.py`。
+
+GUI 不自行實作 JSON serialization；storage 也不得 import GUI widget。不要預先建立 `CaseManager`、`CaseService`、`CaseRepository`、`CaseController` 或 `CaseFactory`。
+
+### 3.4 Settings 與系統設定
+
+少量 application-level 設定集中於 `settings.py`，GUI scale 與 window geometry 直接交由 `QSettings` 保存，不再包裝多層 settings subsystem。
+
+E05、E07、E27 的技術資料仍放在 `config/systems/`。功能實際需要時，以單一 `systems.py` 作集中讀取入口；不要為各系統建立 Manager class。
+
+### 3.5 依賴方向
+
+```text
+GUI
+ ↓
+application / domain logic
+ ↓
+file / config storage
+```
+
+storage 不得依賴 GUI。Case storage、uncertainty、pricing 與 report generation 應可在沒有 GUI 的環境下測試。
+
+---
+
+## 4. GUI
 
 首頁只需要：
 
@@ -165,7 +255,7 @@ Day 2
 
 ---
 
-## 4. Case 資料
+## 5. Case 資料
 
 建議目錄：
 
@@ -223,9 +313,9 @@ cases/
 
 ---
 
-## 5. 量測、歷史資料與 Uncertainty
+## 6. 量測、歷史資料與 Uncertainty
 
-### 5.1 多日量測
+### 6.1 多日量測
 
 每個量測日保存：
 
@@ -248,7 +338,7 @@ raw data 使用 CSV，欄位依校正系統決定。
 
 不要把環境 metadata 塞進 CSV 前幾列。
 
-### 5.2 歷史資料
+### 6.2 歷史資料
 
 找到前次案件後，可選擇匯入：
 
@@ -269,7 +359,7 @@ reference/
 
 舊 Word / Excel 不需要一次全部整理；需要時再嘗試轉換，且不得覆寫原始檔。
 
-### 5.3 Uncertainty
+### 6.3 Uncertainty
 
 每個系統可有：
 
@@ -302,7 +392,7 @@ DUT resolution 必須允許：
 
 ---
 
-## 6. 各校正系統設定
+## 7. 各校正系統設定
 
 每個系統只保存真正共通的設定：
 
@@ -328,7 +418,7 @@ config/systems/
 
 ---
 
-## 7. 儲存與搜尋
+## 8. 儲存與搜尋
 
 案件資料夾中的 JSON / CSV / 文件是 source of truth。
 
@@ -356,7 +446,7 @@ index / cache
 
 ---
 
-## 8. 實作順序與完成條件
+## 9. 實作順序與完成條件
 
 ### Phase 1
 
