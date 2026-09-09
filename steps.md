@@ -1,515 +1,130 @@
 # 校正文件管理工具實作步驟
 
-## 1. 原則
-
-實作時遵守：
+## 1. 實作規則
 
 > 如無必要勿增實體。
 
-具體而言：
+- `arch.md` 先固定完整責任邊界；module 在功能首次出現時才建立。
+- 新邏輯放到責任最直接的位置，不以 GUI callback 實作 JSON、CSV、OCR 或計算。
+- 一個 module 同時承擔兩個以上明顯責任時再拆分。
+- 不為 design pattern 建立沒有實際責任的 Manager、Controller、Repository、Factory 或空目錄。
+- 依賴方向固定為 `GUI → feature logic → storage/config`，不得反向 import GUI。
 
-- 先完成最小可工作的流程。
-- 不為尚未出現的需求預先建立 class、service、manager、database table 或抽象層。
-- 能用函式、dataclass、JSON、CSV 完成，就不要增加額外框架。
-- 不同功能只有在責任明確分離後才拆 module。
-- 不提前加入 ORM、workflow engine、event bus、DI framework、web API、plugin system 或 background service。
-- 不建立重複的 source of truth。
-- `arch.md` 是架構依據；本文件只規定實作順序。
+每完成一步：
 
-責任放置原則：
+1. 執行現有 tests。
+2. 實際啟動 GUI。
+3. 驗證本 Step 的完成條件。
+4. 確認沒有破壞前一步。
+5. 確認文件、程式位置與資料位置一致。
 
-- 功能第一次出現時，放入責任最直接的位置：Calendar UI 放在 calendar page、history UI 放在 history page、Case load/save 放在 Case storage、uncertainty calculation 放在 uncertainty module、report generation 放在 report module。
-- 一個 module 開始同時承擔兩個以上明顯不同責任時再拆分。
-- GUI 只操作與顯示，不自行實作 JSON / CSV serialization 或計算邏輯。
-- 依賴方向保持為 `GUI → application/domain logic → file/config storage`；storage 與計算 module 不得 import GUI。
-- 不因架構外觀而預建 `controllers/`、`services/`、`repositories/`、`factories/`、`interfaces/`、`domain/`、`infrastructure/` 等目前沒有實際責任的目錄。
+## 2. Step 1：bootstrap 與 GUI 骨架
 
----
+建立薄的 `main.py`、`gui/main_window.py` 及實際存在的 Page。`main.py` 只負責 application、data path、settings、window 與 event loop。
 
-## 2. Step 1：建立最小專案骨架
+完成條件：`python main.py` 能開啟首頁，並可進入月曆、歷史案件與設定。
 
-先建立可執行的 PySide6 專案。
+## 3. Step 2：GUI 基礎
 
-第一階段至少應依現有頁面做到：
+使用 layout manager，完成 DPI、GUI scale、快捷鍵、Ctrl+滑鼠滾輪、window geometry 與 QSettings。高倍率頁面須可捲動。
 
-```text
-main.py
-src/calibration_manager/
-├── settings.py
-└── gui/
-    ├── main_window.py
-    └── pages/
-        ├── home_page.py
-        ├── calendar_page.py
-        └── history_page.py
-tests/
-```
+完成條件：關閉重開後保留 UI state，主要頁面無明顯重疊或裁切。
 
-`main.py` 只作 bootstrap，不作主要 application implementation。它只建立 application、少量 application-level dependency、主視窗並啟動 event loop。
-
-每個實際存在的主要頁面負責自己的 layout、widgets 與 UI interaction；`MainWindow` 只負責主框架、頁面切換與 application-level UI state。
-
-若目前尚無實際內容，不要先建立空的 Case、system、uncertainty、report module 或資料夾。
-
-### 完成條件
-
-執行：
-
-```text
-python main.py
-```
-
-可以正常開啟主視窗。
-
-主視窗至少包含：
-
-```text
-月曆
-歷史案件
-設定
-```
-
-此階段不做案件建立、不做 OCR、不做 uncertainty、不做報告。
-
----
-
-## 3. Step 2：先完成 GUI 基礎
-
-完成 GUI 的共同規則：
-
-- PySide6 layout manager。
-- 不大量使用 absolute positioning。
-- 視窗 resize 不明顯跑版。
-- Windows DPI scaling 可正常使用。
-- 可調整 GUI scale。
-- 使用 `QSettings` 保存：
-  - GUI scale
-  - 主視窗大小
-  - 主視窗位置
-
-### 完成條件
-
-關閉再開啟程式後：
-
-- GUI scale 保留。
-- 視窗大小與位置保留。
-- 80%～150% scale 下主要畫面仍可正常操作，且需要時可繼續放大。
-
----
-
-## 4. Step 3：完成月曆與歷史案件入口
+## 4. Step 3：預約與 Intake
 
 ### 月曆
 
-先完成：
+完成月份切換、選取日期、顯示當日案件與建立案件入口。
 
-- 切換月份。
-- 點選日期。
-- 顯示該日案件。
-- 提供「建立新案件」入口。
+### 照片建案
 
-此時案件可以先用簡單測試資料顯示。
-
-### 歷史案件
-
-先完成：
+責任流程固定為：
 
 ```text
-E05
-E07
-E27
+intake/ocr.py
+→ structured OCR result
+→ intake/reservation.py normalize
+→ data/inbox/<temporary-id>/parsed.json
+→ GUI 人工確認
+→ cases/service.py
 ```
 
-三個入口。
+OCR 不得建立 Case 或寫 `case.json`。人工確認以前，資料只能存在 inbox staging。
 
-先只做列表與基本搜尋介面，不急著做完整 SQLite。
+完成條件：照片能產生 staging、表單可修改，且尚未按儲存時不會產生正式 Case。
 
-### 完成條件
+## 5. Step 4：Case model、storage 與建案
 
-使用者可以：
+- `cases/model.py`：描述 Case。
+- `cases/storage.py`：Case folder、JSON load/save、複製 reservation files。
+- `cases/service.py`：產生 ID、建立與確認 Case。
+- `gui/pages/case_page.py`：只負責可編輯表單。
+
+建立：
 
 ```text
-首頁
-→ 月曆
-→ 日期
+data/cases/<year>/<system>/<case_id>/case.json
 ```
 
-以及：
+若由照片建立，確認後將 staging 中的 `original.<ext>` 與 `parsed.json` 複製到 Case `reservation/`。
+
+完成條件：可人工或由照片建立 Case、儲存、關閉並重新開啟；GUI 不包含 JSON serialization。
+
+## 6. Step 5：System configuration
+
+功能首次需要時建立 `systems/loader.py`，讀取 `config/systems/<system>/`。只有 capability 與 pricing 真正使用時才建立相應 module 與 JSON。
+
+完成條件：主程式與 GUI 不寫死 E05/E07/E27 技術規則，且沒有 E05Manager 等空殼 class。
+
+## 7. Step 6：Case-specific uncertainty
+
+建立 Case 時把 system uncertainty template 複製到 Case。先完成讀取、編輯與保存；完整計算仍不實作。
+
+完成條件：Case 可修改自己的 uncertainty 與單一／分 range DUT resolution，不影響 system template。
+
+## 8. Step 7：多日量測
+
+功能出現時建立 `measurement/storage.py`；只有真正需要資料處理時才建立 `processing.py`。
 
 ```text
-首頁
-→ 歷史案件
-→ E05 / E07 / E27
+measurement/day_01/environment.json
+measurement/day_01/raw.csv
 ```
 
-順利導航。
+完成條件：可新增多個量測日、保存與重新載入環境及 raw data；GUI 不自行讀寫 CSV。
 
----
+## 9. Step 8：History index
 
-## 5. Step 4：建立最小 Case model
+Case 與量測格式穩定後建立 `history/index.py`。SQLite 只保存搜尋欄位與 Case path，Case folder 仍是 source of truth。
 
-只建立目前確定需要的 Case 資料。
+完成條件：可依報告編號、序號、客戶、型號搜尋；刪除 SQLite 後可重建。
 
-至少包含：
+## 10. Step 9：歷史資料匯入
 
-- case ID
-- system
-- status
-- customer
-- instrument
-- schedule
-- previous report number
-- current report number
-- calibration request
-- report notes
+History 只回傳找到的 Case；選擇性匯入與檔案複製由 Case service 處理。所有匯入值可修改，參考文件複製到 Case `reference/`。
 
-使用簡單資料模型即可，例如 dataclass。
-
-不要先建立複雜 inheritance hierarchy。
-
-Case model 與 Case load/save 必須和 GUI 分開。初期內容不多時可集中在一個 `cases.py`；GUI callback 不得自行組裝或序列化 Case JSON。內容明顯成長後，才依 model、storage、validation 的責任拆分。
-
-### Case folder
-
-建立案件時產生：
-
-```text
-cases/<year>/<system>/<case_id>/
-└── case.json
-```
-
-其餘資料夾等實際需要時再建立。
-
-### 完成條件
-
-可以：
-
-1. 從月曆建立新案件。
-2. 在 GUI 中輸入基本資料。
-3. 儲存成 `case.json`。
-4. 關閉程式後重新開啟該 Case。
-
----
-
-## 6. Step 5：加入系統設定
-
-為 E05、E07、E27 建立最少必要設定。
-
-只有真正使用到時才建立：
-
-```text
-capability.json
-pricing.json
-measurement_schema.json
-uncertainty_template.json
-```
-
-若某個設定尚未被目前功能使用，不必先建立空檔。
-
-### 完成條件
-
-程式能依 Case 的 `system` 載入對應設定。
-
-主程式不應寫死 E05 / E07 / E27 的技術規則。
-
-程式使用單一、簡單的 `systems.py` 讀取入口即可；此時不要建立 E05 / E07 / E27 Manager class。
-
----
-
-## 7. Step 6：建立 Case-specific uncertainty
-
-當建立 Case 時：
-
-```text
-system uncertainty template
-→ copy
-→ Case/uncertainty/uncertainty.json
-```
-
-實際 uncertainty 計算只讀 Case 內版本。
-
-此階段先只完成：
-
-- 複製
-- 讀取
-- 編輯
-- 儲存
-
-先不要急著完成全部 uncertainty calculation engine。
-
-### DUT resolution
-
-同時加入 DUT resolution 的手動輸入能力。
-
-必須允許：
-
-- 單一 resolution。
-- 依 range 不同的 resolution。
-- 之後可由歷史案件帶入。
-- 使用者可覆寫。
-
-### 完成條件
-
-Case 建立後可以看到並修改：
-
-```text
-Case-specific uncertainty
-DUT resolution
-```
-
-修改不會影響 system template。
-
----
-
-## 8. Step 7：建立多日量測
-
-Case 頁面加入：
-
-```text
-Day 1
-Day 2
-...
-+ 新增量測日
-```
-
-每個量測日只需要：
-
-```text
-environment.json
-raw.csv
-```
-
-### environment
-
-至少支援：
-
-- date
-- operator
-- temperature
-- humidity
-- start time
-- end time
-- notes
-
-### raw data
-
-依 `measurement_schema.json` 建立 GUI table。
-
-GUI table 直接讀寫 CSV，不另建第二份隱藏資料格式。
-
-### 完成條件
-
-一個 Case 可以：
-
-- 新增多個量測日。
-- 輸入環境資料。
-- 輸入 raw data。
-- 儲存。
-- 重新載入。
-
----
-
-## 9. Step 8：建立歷史案件搜尋
-
-等 Case 與量測格式穩定後，再加入 SQLite index。
-
-SQLite 只保存搜尋需要的索引，例如：
-
-- case ID
-- system
-- customer
-- model
-- serial number
-- report number
-- date
-- status
-- path
-
-Case folder 仍是 source of truth。
-
-### 完成條件
-
-可以依：
-
-- report number
-- serial number
-- customer
-- model
-
-找到歷史案件。
-
-刪除 SQLite 後，可以重新掃描 Cases 建立 index。
-
----
-
-## 10. Step 9：加入歷史資料匯入
-
-找到歷史案件後，允許使用者選擇性匯入：
-
-- customer
-- instrument
-- calibration points
-- DUT resolution
-- report notes
-- previous report
-- previous raw data
-
-不得自動假設所有資料都要帶入。
-
-所有帶入資料都必須可修改。
-
-若使用歷史文件作參考，複製進目前 Case：
-
-```text
-reference/
-```
-
-不要只保存外部 path。
-
-### 完成條件
-
-即使完全沒有歷史資料，也仍可正常完成新 Case。
-
----
+完成條件：沒有歷史資料仍可完成新 Case，且匯入不依賴原案件的永久路徑。
 
 ## 11. Step 10：能力驗證與報價
 
-在 calibration points 已能正常建立後，再加入：
+建立 `systems/capability.py`、`systems/pricing.py` 及真正使用的 config。客戶指定「同前次報告」時，以歷史校正點作來源並要求確認，不另建 workflow。
 
-```text
-calibration request
-→ capability validation
-→ pricing
-```
-
-若客戶指定「同前次報告」：
-
-```text
-previous report
-→ calibration points
-→ user confirmation
-```
-
-不要建立另一套獨立 workflow。
-
-### 完成條件
-
-使用者能看到：
-
-- 哪些點可做。
-- 哪些點超出能力。
-- 預估報價。
-
-使用者仍可修改 calibration points。
-
----
+完成條件：顯示可做／超出能力的校正點及預估報價，使用者仍可修改校正點。
 
 ## 12. Step 11：Uncertainty calculation
 
-在 raw data、DUT resolution 與 Case-specific uncertainty 都穩定後，再做完整計算。
+建立 `uncertainty/engine.py`，計算 A 類、系統共通 B 類、DUT resolution、每案額外 B 類、combined 與 expanded uncertainty。
 
-至少支援：
-
-- A 類。
-- 系統共通 B 類。
-- DUT resolution。
-- Case-specific 額外 B 類。
-- combined uncertainty。
-- expanded uncertainty。
-
-計算邏輯寫 Python。
-
-計算邏輯放在獨立 uncertainty module，且不得 import GUI。
-
-JSON 只保存輸入與設定，不塞複雜公式語言。
-
-### 完成條件
-
-由 Case 內資料即可重新計算結果，不依賴外部 template。
-
----
+完成條件：只靠 Case 內資料即可重算，不 import GUI，不把複雜公式語言塞進 JSON。
 
 ## 13. Step 12：Report generation
 
-最後才建立報告生成。
+建立 `reports/generator.py`，由 Case、measurement、processed data、uncertainty 與正式 template 產生 DOCX/PDF。
 
-報告生成放在獨立 report module，GUI 只收集操作意圖並顯示結果。
+完成條件：Case 能由自己的資料產生報告；report notes 仍保存在 Case，不另建第二份 source of truth。
 
-輸入：
+## 14. Step 13：Legacy import 與外部自動化
 
-```text
-case.json
-measurement/
-processed/
-uncertainty/
-report notes
-report template
-```
+需要時才建立 `legacy/excel.py`、`legacy/word.py`，只解析舊檔並回傳資料。Case service 決定如何 copy、normalize、save；不得修改原始檔。
 
-輸出：
-
-```text
-report.docx
-report.pdf
-```
-
-先建立正式 template，不要永久依賴「去年報告」作為 template。
-
-### 完成條件
-
-Case 可以由自己的資料直接產生報告。
-
----
-
-## 14. Step 13：最後再做自動化輸入
-
-核心流程穩定後，再依序考慮：
-
-1. 預約單圖片 → OCR / Vision → 暫存 JSON。
-2. legacy Excel importer。
-3. legacy Word importer。
-4. LIMS 自動填表。
-
-這些都不是核心 Case workflow 的前置條件。
-
-OCR / Vision 解析後必須先經人工確認，再正式寫入 Case。
-
-Legacy importer 不得修改原始檔。
-
----
-
-## 15. 每一步的實作規則
-
-Codex 每完成一個 Step，都應先：
-
-1. 執行現有 tests。
-2. 啟動 GUI。
-3. 驗證本 Step 的完成條件。
-4. 確認沒有破壞前一 Step。
-5. 再開始下一 Step。
-
-若某功能尚未被當前 Step 使用：
-
-> 不實作。
-
-若某抽象只有一個使用者，而且簡單函式即可完成：
-
-> 不新增實體。
-
-若開始出現重複邏輯或清楚的獨立責任：
-
-> 再考慮抽出 class 或 module。
-
-若拆分只是把幾行程式換位置、只有一個 caller 且沒有獨立概念，或必須靠 Manager / Service / Repository 才能解釋：
-
-> 不拆分。
-
-優先確保：
-
-```text
-可以運作
-→ 可以保存
-→ 可以重新載入
-→ 可以追溯
-→ 再增加自動化
-```
+最後才評估 LIMS 自動填表與其他外部整合，不讓它們成為核心 Case workflow 的前置條件。
