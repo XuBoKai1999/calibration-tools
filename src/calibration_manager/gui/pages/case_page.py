@@ -48,6 +48,9 @@ class CasePage(QWidget):
         self.tax_id = QLineEdit()
         self.contact = QLineEdit()
         self.phone = QLineEdit()
+        self.fax = QLineEdit()
+        self.postal_code = QLineEdit()
+        self.email = QLineEdit()
         self.address = QLineEdit()
         self.instrument_name = QLineEdit()
         self.brand = QLineEdit()
@@ -68,6 +71,9 @@ class CasePage(QWidget):
             ("統一編號", self.tax_id),
             ("聯絡人", self.contact),
             ("聯絡電話", self.phone),
+            ("傳真", self.fax),
+            ("郵遞區號", self.postal_code),
+            ("E-mail", self.email),
             ("地址", self.address),
             ("預約件名稱", self.instrument_name),
             ("廠牌", self.brand),
@@ -100,6 +106,9 @@ class CasePage(QWidget):
         self.tax_id.setText(case.customer.get("tax_id", ""))
         self.contact.setText(case.customer.get("contact", ""))
         self.phone.setText(case.customer.get("phone", ""))
+        self.fax.setText(case.customer.get("fax", ""))
+        self.postal_code.setText(case.customer.get("postal_code", ""))
+        self.email.setText(case.customer.get("email", ""))
         self.address.setText(case.customer.get("address", ""))
         self.instrument_name.setText(case.instrument.get("name", ""))
         self.brand.setText(case.instrument.get("brand", ""))
@@ -119,6 +128,9 @@ class CasePage(QWidget):
             "tax_id": self.tax_id,
             "contact": self.contact,
             "phone": self.phone,
+            "fax": self.fax,
+            "postal_code": self.postal_code,
+            "email": self.email,
             "address": self.address,
             "instrument_name": self.instrument_name,
             "brand": self.brand,
@@ -132,6 +144,8 @@ class CasePage(QWidget):
             self.system.setCurrentText(fields["system"])
         if fields.get("calibration_notes"):
             self.calibration_points.setPlainText(fields["calibration_notes"])
+        if fields.get("previous_report_number"):
+            self.previous_report.setText(fields["previous_report_number"])
         self.message.setText("影像辨識完成；請逐欄確認後再儲存案件")
 
     def case_data(self) -> Case:
@@ -144,6 +158,9 @@ class CasePage(QWidget):
                 "tax_id": self.tax_id.text().strip(),
                 "contact": self.contact.text().strip(),
                 "phone": self.phone.text().strip(),
+                "fax": self.fax.text().strip(),
+                "postal_code": self.postal_code.text().strip(),
+                "email": self.email.text().strip(),
                 "address": self.address.text().strip(),
             },
             instrument={

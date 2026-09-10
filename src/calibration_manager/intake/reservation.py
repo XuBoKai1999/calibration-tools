@@ -57,8 +57,24 @@ def parse_reservation_tokens(tokens: list[Token]) -> dict:
             key=lambda token: abs(token.center_y - anchor.center_y) * 5 + token.left - anchor.right,
         ).text if candidates else ""
 
+    def phone_right_of(label: str) -> str:
+        anchor = first(label)
+        if not anchor:
+            return ""
+        candidates = [
+            token for token in tokens
+            if token.left >= anchor.right - 10
+            and abs(token.center_y - anchor.center_y) < 80
+            and len(re.sub(r"\D", "", token.text)) >= 7
+        ]
+        return min(candidates, key=lambda token: abs(token.center_y - anchor.center_y)).text \
+            if candidates else ""
+
     raw_text = "\n".join(token.text for token in tokens)
     date_match = re.search(r"(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", raw_text)
+    report_match = re.search(r"\bE\d{6}[A-Z]?\b", raw_text, re.IGNORECASE)
+    email_match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", raw_text)
+    postal_code = next((token.text for token in tokens if re.fullmatch(r"\d{3}-\d{2}", token.text)), "")
     customer_label = first("顧客名稱")
     customer_candidates = [
         token for token in tokens
@@ -95,13 +111,17 @@ def parse_reservation_tokens(tokens: list[Token]) -> dict:
         if customer_candidates else "",
         "tax_id": tax_id,
         "contact": right_of("聯絡人"),
-        "phone": right_of("聯絡電話"),
+        "phone": phone_right_of("聯絡電話"),
+        "fax": phone_right_of("傳真號碼"),
+        "postal_code": postal_code,
+        "email": re.sub(r"\.{2,}", ".", email_match.group(0)) if email_match else "",
         "address": address,
         "instrument_name": item_name,
         "brand": identity_parts[0] if len(identity_parts) >= 2 else "",
         "model": identity_parts[-2] if len(identity_parts) >= 2 else identity,
         "serial_number": identity_parts[-1] if len(identity_parts) >= 2 else "",
         "calibration_notes": calibration,
+        "previous_report_number": report_match.group(0).upper() if report_match else "",
     }
 
 

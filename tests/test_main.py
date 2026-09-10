@@ -97,6 +97,7 @@ class MainWindowTest(unittest.TestCase):
             self.assertIs(window.pages.currentWidget(), window.case_page)
             window.case_page.customer.setText("測試客戶")
             window.case_page.model.setText("MODEL-1")
+            window.case_page.apply_ocr_fields({"previous_report_number": "E240540A"})
             case = window.case_page.case_data()
             window.save_current_case(case)
 
@@ -104,6 +105,7 @@ class MainWindowTest(unittest.TestCase):
             reopened.open_case(case.case_id)
             self.assertEqual(reopened.case_page.customer.text(), "測試客戶")
             self.assertEqual(reopened.case_page.model.text(), "MODEL-1")
+            self.assertEqual(reopened.case_page.previous_report.text(), "E240540A")
             self.assertFalse(reopened.case_page.system.isEnabled())
 
 

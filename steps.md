@@ -51,6 +51,8 @@ intake/ocr.py
 
 OCR 不得建立 Case 或寫 `case.json`。人工確認以前，資料只能存在 inbox staging。
 
+欄位解析應優先取得前次報告編號，供後續歷史案件查找；照片中不存在或無法可靠辨識的 LIMS 欄位保持空白，不以猜測補值。
+
 完成條件：照片能產生 staging、表單可修改，且尚未按儲存時不會產生正式 Case。
 
 ## 5. Step 4：Case model、storage 與建案

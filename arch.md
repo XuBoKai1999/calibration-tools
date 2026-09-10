@@ -117,6 +117,8 @@ src/calibration_manager/
 
 OCR 不建立 Case、不寫 `case.json`、不決定 Case folder，也不更新 GUI。
 
+預約單欄位 mapping 優先保留前次報告編號，因其會用於歷史案件查找與校正點參考。照片沒有提供或辨識信心不足的 LIMS 欄位（例如校正者、執行部門、載運方式、英文抬頭）維持空白，交由人工確認，不推測填值。
+
 ### 4.5 後續責任
 
 - `measurement/`：量測日、`environment.json`、`raw.csv` 與 raw data processing；不計算 uncertainty。
