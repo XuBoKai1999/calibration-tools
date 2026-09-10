@@ -13,7 +13,7 @@ class Case:
         "previous_report_number": "", "current_report_number": "", "notes": []
     })
     calibration_request: dict = field(default_factory=lambda: {
-        "mode": "specified_points", "reference_report": None, "points": []
+        "mode": "unspecified", "reference_report": None, "points": [], "notes": ""
     })
     schema_version: int = 1
 

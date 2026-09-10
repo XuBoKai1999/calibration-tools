@@ -6,7 +6,7 @@ from pathlib import Path
 from calibration_manager.cases.model import Case
 
 
-CASE_ID_PATTERN = re.compile(r"^(\d{4})-(E05|E07|E27)-(\d{5})$")
+CASE_ID_PATTERN = re.compile(r"^(\d{4})-([A-Z]\d{2})-(\d{5})$")
 
 
 def case_file(cases_root: Path, case_id: str) -> Path:

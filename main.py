@@ -14,7 +14,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setOrganizationName(ORGANIZATION_NAME)
     app.setApplicationName(APPLICATION_NAME)
-    window = MainWindow(QSettings(), Path(__file__).parent / "data")
+    root = Path(__file__).parent
+    window = MainWindow(QSettings(), root / "data", root / "config" / "systems")
     window.show()
     return app.exec()
 

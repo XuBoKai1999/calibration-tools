@@ -21,7 +21,7 @@ class CasePage(QWidget):
     save_requested = Signal(object)
     system_changed = Signal(str)
 
-    def __init__(self):
+    def __init__(self, systems: list[dict]):
         super().__init__()
         self.is_new = False
         layout = QVBoxLayout(self)
@@ -38,8 +38,11 @@ class CasePage(QWidget):
         self.case_id = QLineEdit()
         self.case_id.setReadOnly(True)
         self.system = QComboBox()
-        self.system.addItems(["E05", "E07", "E27"])
-        self.system.currentTextChanged.connect(self.system_changed.emit)
+        for item in systems:
+            self.system.addItem(f"{item['code']}－{item['name']}", item["code"])
+        self.system.currentIndexChanged.connect(
+            lambda: self.system_changed.emit(self.system.currentData())
+        )
         self.status = QComboBox()
         self.status.addItems(["reserved", "received", "in_progress", "completed"])
         self.reserved_date = QDateEdit(calendarPopup=True)
@@ -60,6 +63,7 @@ class CasePage(QWidget):
         self.current_report = QLineEdit()
         self.calibration_points = QPlainTextEdit()
         self.calibration_points.setPlaceholderText("每行一個校正點")
+        self.calibration_notes = QPlainTextEdit()
         self.report_notes = QPlainTextEdit()
 
         for label, widget in (
@@ -82,6 +86,7 @@ class CasePage(QWidget):
             ("前次報告編號", self.previous_report),
             ("本次報告編號", self.current_report),
             ("校正點", self.calibration_points),
+            ("校正需求說明", self.calibration_notes),
             ("報告附註", self.report_notes),
         ):
             form.addRow(label, widget)
@@ -99,7 +104,7 @@ class CasePage(QWidget):
     def set_case(self, case: Case, is_new: bool = False) -> None:
         self.is_new = False
         self.case_id.setText(case.case_id)
-        self.system.setCurrentText(case.system)
+        self.system.setCurrentIndex(self.system.findData(case.system))
         self.status.setCurrentText(case.status)
         self.reserved_date.setDate(QDate.fromString(case.schedule.get("reserved_date", ""), "yyyy-MM-dd"))
         self.customer.setText(case.customer.get("name", ""))
@@ -117,6 +122,7 @@ class CasePage(QWidget):
         self.previous_report.setText(case.report.get("previous_report_number", ""))
         self.current_report.setText(case.report.get("current_report_number", ""))
         self.calibration_points.setPlainText("\n".join(case.calibration_request.get("points", [])))
+        self.calibration_notes.setPlainText(case.calibration_request.get("notes", ""))
         self.report_notes.setPlainText("\n".join(case.report.get("notes", [])))
         self.is_new = is_new
         self.system.setEnabled(is_new)
@@ -141,9 +147,11 @@ class CasePage(QWidget):
             if fields.get(name):
                 widget.setText(fields[name])
         if fields.get("system"):
-            self.system.setCurrentText(fields["system"])
+            index = self.system.findData(fields["system"])
+            if index >= 0:
+                self.system.setCurrentIndex(index)
         if fields.get("calibration_notes"):
-            self.calibration_points.setPlainText(fields["calibration_notes"])
+            self.calibration_notes.setPlainText(fields["calibration_notes"])
         if fields.get("previous_report_number"):
             self.previous_report.setText(fields["previous_report_number"])
         self.message.setText("影像辨識完成；請逐欄確認後再儲存案件")
@@ -151,7 +159,7 @@ class CasePage(QWidget):
     def case_data(self) -> Case:
         return Case(
             case_id=self.case_id.text(),
-            system=self.system.currentText(),
+            system=self.system.currentData(),
             status=self.status.currentText(),
             customer={
                 "name": self.customer.text().strip(),
@@ -183,5 +191,6 @@ class CasePage(QWidget):
                 "mode": "specified_points",
                 "reference_report": None,
                 "points": [line for line in self.calibration_points.toPlainText().splitlines() if line],
+                "notes": self.calibration_notes.toPlainText().strip(),
             },
         )

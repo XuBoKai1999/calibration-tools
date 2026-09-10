@@ -74,9 +74,27 @@ data/cases/<year>/<system>/<case_id>/case.json
 
 ## 6. Step 5：System configuration
 
-功能首次需要時建立 `systems/loader.py`，讀取 `config/systems/<system>/`。只有 capability 與 pricing 真正使用時才建立相應 module 與 JSON。
+建立 `systems/loader.py`，集中讀寫及驗證 `config/systems/<system>/`。GUI 不直接序列化設定 JSON。
 
-完成條件：主程式與 GUI 不寫死 E05/E07/E27 技術規則，且沒有 E05Manager 等空殼 class。
+每個 E05、E07、E27 系統提供：
+
+```text
+system.json
+capability.json
+pricing.json
+measurement_schema.json
+```
+
+設定畫面保留可編輯位置，讓使用者填寫能力範圍、計價規則及量測輸入規格。尚未取得正式數值時保留空規則與待確認備註，不自行假設。
+
+校正點來源規則同時固定為：
+
+1. 優先使用本次客戶指定的校正點。
+2. 若沒有，使用前次報告的校正點。
+3. 只有前次報告編號、但點位尚未匯入時，提醒使用者匯入或人工確認。
+4. 本次與前次點位都沒有時，明確提醒使用者，不靜默建立預設點。
+
+完成條件：主程式與 GUI 不寫死 E05/E07/E27 技術規則；設定可編輯、驗證及重載；校正點缺漏有明確提示；且沒有 E05Manager 等空殼 class。
 
 ## 7. Step 6：Case-specific uncertainty
 

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 class HistoryPage(QWidget):
     home_requested = Signal()
 
-    def __init__(self):
+    def __init__(self, systems: list[dict]):
         super().__init__()
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
@@ -29,6 +29,6 @@ class HistoryPage(QWidget):
         self.search.setPlaceholderText("搜尋 Case ID、報告編號、客戶、型號、序號、日期或狀態")
         layout.addWidget(self.search)
         self.systems = QTabWidget()
-        for system in ("E05", "E07", "E27"):
-            self.systems.addTab(QListWidget(), system)
+        for system in systems:
+            self.systems.addTab(QListWidget(), system["code"])
         layout.addWidget(self.systems)

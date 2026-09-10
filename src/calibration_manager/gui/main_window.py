@@ -4,7 +4,6 @@ from PySide6.QtCore import QDate, QEvent, QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QInputDialog,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -15,8 +14,9 @@ from PySide6.QtWidgets import (
 )
 
 from calibration_manager.cases.model import Case
-from calibration_manager.cases.service import create_case, load_case_by_id, save_case
+from calibration_manager.cases.service import calibration_warning, create_case, load_case_by_id, save_case
 from calibration_manager.cases.storage import load_all_cases
+from calibration_manager.gui.dialogs.system_settings_dialog import SystemSettingsDialog
 from calibration_manager.gui.pages.case_page import CasePage
 from calibration_manager.gui.pages.calendar_page import CalendarPage
 from calibration_manager.gui.pages.history_page import HistoryPage
@@ -29,15 +29,26 @@ from calibration_manager.settings import (
     WINDOW_GEOMETRY_KEY,
 )
 from calibration_manager.intake.reservation import stage_reservation_photo
+from calibration_manager.systems.loader import load_systems
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: QSettings | None = None, data_root: Path | None = None):
+    def __init__(
+        self,
+        settings: QSettings | None = None,
+        data_root: Path | None = None,
+        systems_root: Path | None = None,
+    ):
         super().__init__()
         self.settings = settings or QSettings()
         self.data_root = data_root or Path.cwd() / "data"
         self.cases_root = self.data_root / "cases"
         self.inbox_root = self.data_root / "inbox"
+        self.systems_root = systems_root or Path.cwd() / "config" / "systems"
+        self.systems = load_systems(self.systems_root)
+        if not self.systems:
+            raise ValueError(f"找不到校正系統設定：{self.systems_root}")
+        self.system_codes = {item["code"] for item in self.systems}
         self.base_font_size = QApplication.font().pointSizeF()
         self.scale = 100
         self.pending_reservation: Path | None = None
@@ -46,8 +57,8 @@ class MainWindow(QMainWindow):
 
         self.home_page = HomePage()
         self.calendar_page = CalendarPage()
-        self.history_page = HistoryPage()
-        self.case_page = CasePage()
+        self.history_page = HistoryPage(self.systems)
+        self.case_page = CasePage(self.systems)
         self.pages = QStackedWidget()
         for page in (self.home_page, self.calendar_page, self.history_page, self.case_page):
             self.pages.addWidget(page)
@@ -55,7 +66,7 @@ class MainWindow(QMainWindow):
 
         self.home_page.calendar_requested.connect(lambda: self.show_page(self.calendar_page))
         self.home_page.history_requested.connect(lambda: self.show_page(self.history_page))
-        self.home_page.settings_requested.connect(self.choose_scale)
+        self.home_page.settings_requested.connect(self.open_settings)
         self.calendar_page.home_requested.connect(lambda: self.show_page(self.home_page))
         self.calendar_page.new_case_requested.connect(self.start_new_case)
         self.calendar_page.photo_requested.connect(self.choose_reservation_photo)
@@ -84,7 +95,9 @@ class MainWindow(QMainWindow):
 
     def start_new_case(self, date: QDate) -> None:
         self.pending_reservation = None
-        case = create_case(self.cases_root, date.toString(Qt.ISODate))
+        case = create_case(
+            self.cases_root, date.toString(Qt.ISODate), self.systems[0]["code"], self.system_codes
+        )
         self.case_page.set_case(case, is_new=True)
         self.show_page(self.case_page)
 
@@ -111,7 +124,9 @@ class MainWindow(QMainWindow):
     def change_new_case_system(self, system: str) -> None:
         if self.case_page.is_new:
             date = self.case_page.reserved_date.date().toString(Qt.ISODate)
-            self.case_page.case_id.setText(create_case(self.cases_root, date, system).case_id)
+            self.case_page.case_id.setText(
+                create_case(self.cases_root, date, system, self.system_codes).case_id
+            )
 
     def save_current_case(self, case: Case) -> None:
         try:
@@ -120,7 +135,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "無法儲存案件", str(error))
             return
         self.case_page.set_case(case)
-        self.case_page.message.setText("已儲存")
+        warning = calibration_warning(case)
+        self.case_page.message.setText("已儲存" + (f"；{warning}" if warning else ""))
         self.pending_reservation = None
         self.refresh_cases()
 
@@ -151,18 +167,10 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self.set_scale(self.scale - SCALE_STEP))
         QShortcut(QKeySequence("Ctrl+0"), self, activated=lambda: self.set_scale(100))
 
-    def choose_scale(self) -> None:
-        scale, accepted = QInputDialog.getInt(
-            self,
-            "介面縮放",
-            "GUI scale (%)",
-            self.scale,
-            MINIMUM_SCALE,
-            MAXIMUM_SCALE,
-            SCALE_STEP,
-        )
-        if accepted:
-            self.set_scale(scale)
+    def open_settings(self) -> None:
+        dialog = SystemSettingsDialog(self.systems_root, self.systems, self.scale, self)
+        dialog.scale_changed.connect(self.set_scale)
+        dialog.exec()
 
     def set_scale(self, percent: int) -> None:
         percent = min(MAXIMUM_SCALE, max(MINIMUM_SCALE, round(percent / SCALE_STEP) * SCALE_STEP))

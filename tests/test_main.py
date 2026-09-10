@@ -97,9 +97,15 @@ class MainWindowTest(unittest.TestCase):
             self.assertIs(window.pages.currentWidget(), window.case_page)
             window.case_page.customer.setText("測試客戶")
             window.case_page.model.setText("MODEL-1")
-            window.case_page.apply_ocr_fields({"previous_report_number": "E240540A"})
+            window.case_page.apply_ocr_fields({
+                "system": "E27",
+                "previous_report_number": "E240540A",
+            })
             case = window.case_page.case_data()
+            self.assertEqual(case.system, "E27")
+            self.assertIn("-E27-", case.case_id)
             window.save_current_case(case)
+            self.assertIn("前次報告", window.case_page.message.text())
 
             reopened = MainWindow(settings, root)
             reopened.open_case(case.case_id)

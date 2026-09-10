@@ -67,7 +67,8 @@ src/calibration_manager/
 │   │   ├── calendar_page.py
 │   │   ├── history_page.py
 │   │   └── case_page.py
-│   └── dialogs/                  # 有實際 dialog 時才建立
+│   └── dialogs/
+│       └── system_settings_dialog.py
 ├── cases/
 │   ├── model.py
 │   ├── storage.py
@@ -80,10 +81,10 @@ src/calibration_manager/
 │   └── processing.py
 ├── uncertainty/                 # 實作不確定度時建立
 │   └── engine.py
-├── systems/                     # 實作系統設定時建立
+├── systems/
 │   ├── loader.py
-│   ├── capability.py
-│   └── pricing.py
+│   ├── capability.py            # 實作能力判定時才建立
+│   └── pricing.py               # 實作報價運算時才建立
 ├── history/                     # 實作索引時建立
 │   └── index.py
 ├── reports/                     # 實作報告時建立
@@ -129,6 +130,31 @@ OCR 不建立 Case、不寫 `case.json`、不決定 Case folder，也不更新 G
 - `legacy/`：解析舊 Excel/Word；只回傳解析資料，由 Case service 決定匯入與保存。
 - `settings.py`：少量 QSettings key、GUI scale、window geometry 與 data path policy；不建立 settings manager。
 
+### 4.6 System configuration 的可維護性
+
+每個系統至少保留三種可由使用者維護的規格：
+
+```text
+config/systems/<system>/
+├── capability.json          # 能力範圍、限制與備註
+├── pricing.json             # 計價規則、幣別與備註
+└── measurement_schema.json  # 量測輸入欄位規格
+```
+
+設定畫面必須提供讀取、編輯、驗證及儲存位置。尚未確認的實際能力或價格使用空規則與「待確認」備註，不得杜撰數值。GUI 不自行讀寫 JSON，而是呼叫 `systems/loader.py`。
+
+### 4.7 校正點來源
+
+校正點來源依序為：
+
+```text
+本次客戶指定校正點
+→ 若無，使用前次報告的校正點
+→ 若兩者都無，提醒使用者補充
+```
+
+只有前次報告編號但尚未取得前次校正點時，狀態仍是「等待匯入／確認」，不能把報告編號當作校正點，也不能靜默產生預設點。自動帶入的前次點位仍可人工修改。
+
 ## 5. 資料架構
 
 ```text
@@ -139,9 +165,9 @@ data/
 
 config/
 └── systems/
-    ├── E05/
-    ├── E07/
-    └── E27/
+    ├── E05/{system,capability,pricing,measurement_schema}.json
+    ├── E07/{system,capability,pricing,measurement_schema}.json
+    └── E27/{system,capability,pricing,measurement_schema}.json
 
 templates/                       # 建立正式報告模板時才出現
 ```
