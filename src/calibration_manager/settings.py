@@ -13,5 +13,5 @@ MAXIMUM_SCALE = 1000
 SCALE_STEP = 10
 
 
-def default_data_root() -> Path:
+def legacy_app_data_root() -> Path:
     return Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))

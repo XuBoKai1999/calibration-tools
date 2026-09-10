@@ -7,7 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from calibration_manager.cases.service import calibration_warning, create_case, save_case
-from calibration_manager.cases.storage import delete_case, load_all_cases, load_case
+from calibration_manager.cases.storage import delete_case, load_all_cases, load_case, migrate_cases_root
+from calibration_manager.cases.model import Case
 
 
 class CaseStorageTest(unittest.TestCase):
@@ -37,7 +38,7 @@ class CaseStorageTest(unittest.TestCase):
     def test_confirmed_reservation_is_copied_into_case(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            staging = root / "inbox" / "draft-id"
+            staging = root / "staging" / "draft-id"
             staging.mkdir(parents=True)
             (staging / "original.jpg").write_bytes(b"photo")
             (staging / "parsed.json").write_text("{}", encoding="utf-8")
@@ -129,6 +130,50 @@ class CaseStorageTest(unittest.TestCase):
             delete_case(root, first.case_id)
 
             self.assertEqual(load_all_cases(root), [second])
+
+    def test_app_data_cases_are_safely_moved_to_repository_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "appdata" / "cases"
+            destination = root / "repo" / "data" / "cases"
+            case = create_case(source, "2026-09-09", "E27", self.systems)
+            saved = save_case(case, source)
+            (saved.parent / "extra.bin").write_bytes(b"complete case")
+
+            migrated = migrate_cases_root(source, destination)
+
+            target = destination / "E27" / case.case_id
+            self.assertEqual(migrated, [target])
+            self.assertFalse(saved.parent.exists())
+            self.assertEqual((target / "extra.bin").read_bytes(), b"complete case")
+
+    def test_app_data_collision_preserves_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "appdata" / "cases"
+            destination = root / "repo" / "data" / "cases"
+            case = create_case(source, "2026-09-09", "E27", self.systems)
+            saved = save_case(case, source)
+            (destination / "E27" / case.case_id).mkdir(parents=True)
+
+            with self.assertRaisesRegex(FileExistsError, "來源保持不變"):
+                migrate_cases_root(source, destination)
+            self.assertTrue(saved.exists())
+
+    def test_app_data_old_layout_collision_preserves_original_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "appdata" / "cases"
+            destination = root / "repo" / "data" / "cases"
+            case = Case("2026-E27-00001", "E27", schedule={"reserved_date": "2026-09-09"})
+            old = source / "2026" / "E27" / case.case_id
+            old.mkdir(parents=True)
+            (old / "case.json").write_text(json.dumps(case.to_dict()), encoding="utf-8")
+            (destination / "E27" / case.case_id).mkdir(parents=True)
+
+            with self.assertRaisesRegex(FileExistsError, "來源保持不變"):
+                migrate_cases_root(source, destination)
+            self.assertTrue((old / "case.json").exists())
 
 
 if __name__ == "__main__":

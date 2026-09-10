@@ -86,11 +86,11 @@ GUI 編輯既有 Case 時只更新自己負責的欄位，不得 reconstruct 後
 
 ## 5. Runtime storage
 
-Runtime data 位於作業系統 application data 目錄，不放進 Git repository。目標結構依 system 分組：
+Runtime data 固定放在 repository-local `data/`，方便人工檢查，但整個目錄由 Git ignore，不屬於 version-controlled source。程式碼、設定與文件才進版控。
 
 ```text
-<data_root>/
-├── inbox/
+<repo>/data/
+├── staging/
 ├── cases/
 │   ├── E05/<case_id>/
 │   ├── E07/<case_id>/
@@ -104,6 +104,7 @@ Runtime data 位於作業系統 application data 目錄，不放進 Git reposito
 
 - `cases/`：本 application 正式管理的校正案件。
 - `references/`：application 出現以前的歷史材料，或另行維護的歷史來源／archive。
+- `staging/`：OCR 臨時工作資料；成功建案或放棄後清除，不是正式 Case 資料。
 - historical reference 不會自動變成 Case，也不為了套入 Case model 而製造假 Case。
 
 成熟 Case 的概念結構：
@@ -226,7 +227,7 @@ current report 未來可填 current customer、DUT、report number、calibration
 - OCR confidence filtering 與 staging cleanup。
 - Case non-destructive GUI update、schema-version 與未知頂層欄位保護。
 - E05/E07/E27 基本 config 載入、編輯與最低語意驗證。
-- runtime data 移出 repository。
+- runtime `data/` 固定在 repository 內供人工檢查，並由 Git 完整忽略。
 - 先選 system 的 manual/OCR New Case flow 與 Case Workspace shell。
 - Case 路徑 `cases/<system>/<case_id>/`、舊年度路徑安全移轉及單一 Case 刪除。
 - persisted Case 儲存後立即更新 Calendar／History，並可重新開啟。

@@ -45,7 +45,7 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings()
         self.data_root = data_root or Path.cwd() / "data"
         self.cases_root = self.data_root / "cases"
-        self.inbox_root = self.data_root / "inbox"
+        self.staging_root = self.data_root / "staging"
         self.systems_root = systems_root or Path.cwd() / "config" / "systems"
         self.systems = load_systems(self.systems_root)
         if not self.systems:
@@ -134,7 +134,7 @@ class MainWindow(QMainWindow):
     def import_reservation_photo(self, path: Path, date: QDate, system: str) -> None:
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            staging_dir, draft = stage_reservation_photo(path, self.inbox_root)
+            staging_dir, draft = stage_reservation_photo(path, self.staging_root)
         except (OSError, ValueError, RuntimeError) as error:
             QMessageBox.critical(self, "影像辨識失敗", str(error))
             return
@@ -236,5 +236,5 @@ class MainWindow(QMainWindow):
 
     def discard_pending_reservation(self) -> None:
         if self.pending_reservation:
-            discard_reservation_staging(self.pending_reservation, self.inbox_root)
+            discard_reservation_staging(self.pending_reservation, self.staging_root)
             self.pending_reservation = None

@@ -15,7 +15,7 @@
 
 **Status: DONE**
 
-已完成：薄 `main.py`、責任分離、runtime data 移出 Git、Case 非破壞式更新、schema-version 與未知頂層欄位保護、OCR confidence、staging cleanup、system config 最低語意驗證、GUI scale／geometry 記憶及相關測試。
+已完成：薄 `main.py`、責任分離、repository-local `data/` 完整 Git ignore、Case 非破壞式更新、schema-version 與未知頂層欄位保護、OCR confidence、staging cleanup、system config 最低語意驗證、GUI scale／geometry 記憶及相關測試。
 
 Repository privacy、移除既有敏感檔與 rewrite Git history 是外部維護工作，不屬於 application development step；執行前需另行確認與備份。
 

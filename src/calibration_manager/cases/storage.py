@@ -52,19 +52,31 @@ def migrate_old_cases(cases_root: Path) -> list[Path]:
             continue
         if destination.exists():
             raise FileExistsError(f"舊案件移轉目的地已存在，未移動來源：{destination}")
-        temporary = destination.with_name(destination.name + ".migrating")
-        if temporary.exists():
-            raise FileExistsError(f"舊案件移轉暫存目錄已存在：{temporary}")
-        temporary.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            shutil.copytree(source, temporary)
-            if _directory_digest(source) != _directory_digest(temporary):
-                raise OSError(f"舊案件複製驗證失敗：{source}")
-            temporary.replace(destination)
-        except Exception:
-            if temporary.exists():
-                shutil.rmtree(temporary)
-            raise
+        _copy_verified_directory(source, destination)
+        shutil.rmtree(source)
+        migrated.append(destination)
+    return migrated
+
+
+def migrate_cases_root(source_root: Path, destination_root: Path) -> list[Path]:
+    if not source_root.exists():
+        return []
+    case_files = sorted(source_root.glob("*/*/case.json"))
+    case_files.extend(sorted(source_root.glob("[0-9][0-9][0-9][0-9]/*/*/case.json")))
+    sources = [path.parent for path in case_files]
+    destinations = []
+    for source in sources:
+        case = load_case(source / "case.json")
+        match = CASE_ID_PATTERN.fullmatch(case.case_id)
+        if not match or source.name != case.case_id or source.parent.name != case.system:
+            raise ValueError(f"Case 搬移來源路徑與內容不一致：{source}")
+        destinations.append(destination_root / case.system / case.case_id)
+    collisions = [destination for destination in destinations if destination.exists()]
+    if collisions:
+        raise FileExistsError(f"Case 搬移目的地已存在，來源保持不變：{collisions[0]}")
+    migrated = []
+    for source, destination in zip(sources, destinations):
+        _copy_verified_directory(source, destination)
         shutil.rmtree(source)
         migrated.append(destination)
     return migrated
@@ -97,3 +109,19 @@ def _directory_digest(directory: Path) -> list[tuple[str, str]]:
         for path in sorted(directory.rglob("*"))
         if path.is_file()
     ]
+
+
+def _copy_verified_directory(source: Path, destination: Path) -> None:
+    temporary = destination.with_name(destination.name + ".migrating")
+    if temporary.exists():
+        raise FileExistsError(f"Case 搬移暫存目錄已存在：{temporary}")
+    temporary.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copytree(source, temporary)
+        if _directory_digest(source) != _directory_digest(temporary):
+            raise OSError(f"Case 複製驗證失敗：{source}")
+        temporary.replace(destination)
+    except Exception:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        raise

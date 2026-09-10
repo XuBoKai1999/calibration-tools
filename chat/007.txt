@@ -1,0 +1,30 @@
+1. Runtime data 現在固定解析為：`C:\Users\User2\Documents\Works\02 校正輔助工具\data`。`main.py` 直接使用 `<repo>/data`；QStandardPaths 只保留用來尋找舊 AppData Case，不再決定目前 runtime root。
+
+2. 目標 layout 為：
+
+```text
+data/
+├── cases/<system>/<case_id>/
+├── references/<system>/
+└── staging/<uuid>/
+```
+
+目錄仍按需建立，不預建空資料夾。Case layout 與 Case ID 語意沒有改變。
+
+3. 舊 runtime 位置為 `C:\Users\User2\AppData\Local\CalibrationLab\CalibrationCaseManager`，找到一個正式 E27 Case。
+
+4. 已完成實際一次性搬移：該 Case 現位於 `data/cases/E27/2026-E27-00001/`。搬移使用 destination collision 預檢、temporary copy、逐檔 SHA-256 驗證、rename，成功後才移除舊 Case source；目前舊 AppData `cases/` 下正式檔案數為 0，空目錄與舊 inbox 未擅自刪除。
+
+5. OCR 新暫存位置已由 `data/inbox/` 改為 `data/staging/`。成功建案會把 reservation material 複製進 Case 後清除 staging；取消、放棄或關閉也會清除 pending staging。
+
+6. `.gitignore` 現在明確使用 `/data/`，並保留 `__pycache__/`、`*.py[cod]`、`.venv/`、`.env`、`*.tmp`。
+
+7. `arch.md` 與 `steps.md` 已改成 repository-local runtime data 決策，roadmap 沒有推進。完整測試 26/26 通過；dependency direction 乾淨；GUI 實際啟動成功。
+
+8. Git index 仍追蹤 4 個舊 `data/inbox` 檔案；`.gitignore` 不會自動取消追蹤。仍需由你執行：
+
+```powershell
+git rm -r --cached data
+```
+
+本次沒有執行該命令，也沒有 rewrite Git history。沒有開始下一個 roadmap step。

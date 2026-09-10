@@ -25,7 +25,7 @@ class Token:
         return (self.top + self.bottom) / 2
 
 
-def stage_reservation_photo(image_path: Path, inbox_root: Path) -> tuple[Path, dict]:
+def stage_reservation_photo(image_path: Path, staging_root: Path) -> tuple[Path, dict]:
     ocr_result = parse_image(image_path)
     draft = {
         "source_name": image_path.name,
@@ -33,7 +33,7 @@ def stage_reservation_photo(image_path: Path, inbox_root: Path) -> tuple[Path, d
         "mean_confidence": ocr_result["mean_confidence"],
         "fields": parse_reservation_tokens(_tokens_from_ocr(ocr_result)),
     }
-    staging_dir = inbox_root / uuid.uuid4().hex
+    staging_dir = staging_root / uuid.uuid4().hex
     staging_dir.mkdir(parents=True)
     shutil.copy2(image_path, staging_dir / f"original{image_path.suffix.lower()}")
     _write_json(staging_dir / "parsed.json", draft)
@@ -142,11 +142,11 @@ def _tokens_from_ocr(result: dict) -> list[Token]:
     return tokens
 
 
-def discard_reservation_staging(staging_dir: Path, inbox_root: Path) -> None:
+def discard_reservation_staging(staging_dir: Path, staging_root: Path) -> None:
     staging = staging_dir.resolve()
-    inbox = inbox_root.resolve()
-    if staging.parent != inbox:
-        raise ValueError("拒絕刪除 inbox 以外的暫存資料")
+    root = staging_root.resolve()
+    if staging.parent != root:
+        raise ValueError("拒絕刪除 staging 以外的暫存資料")
     if staging.exists():
         shutil.rmtree(staging)
 
