@@ -1,150 +1,123 @@
 # 校正文件管理工具實作步驟
 
-## 1. 實作規則
+`arch.md` 定義穩定架構、責任、storage model 與 data flow；本文件只定義施工順序與完成條件。
+
+## 實作規則
 
 > 如無必要勿增實體。
 
-- `arch.md` 先固定完整責任邊界；module 在功能首次出現時才建立。
-- 新邏輯放到責任最直接的位置，不以 GUI callback 實作 JSON、CSV、OCR 或計算。
-- 一個 module 同時承擔兩個以上明顯責任時再拆分。
-- 不為 design pattern 建立沒有實際責任的 Manager、Controller、Repository、Factory 或空目錄。
-- 依賴方向固定為 `GUI → feature logic → storage/config`，不得反向 import GUI。
+- 只實作 `CURRENT` step；功能首次出現時才建立 module。
+- 依賴固定為 `GUI → feature logic → storage/config`。
+- 不預建 Manager、Controller、Repository、Factory、DTO 或 system class hierarchy。
+- 每一步完成後執行 tests、啟動 GUI、驗證完成條件並同步文件。
 
-每完成一步：
+## Step 0 — Existing hardening
 
-1. 執行現有 tests。
-2. 實際啟動 GUI。
-3. 驗證本 Step 的完成條件。
-4. 確認沒有破壞前一步。
-5. 確認文件、程式位置與資料位置一致。
+**Status: DONE**
 
-## 2. Step 1：bootstrap 與 GUI 骨架
+已完成：薄 `main.py`、責任分離、runtime data 移出 Git、Case 非破壞式更新、schema-version 與未知頂層欄位保護、OCR confidence、staging cleanup、system config 最低語意驗證、GUI scale／geometry 記憶及相關測試。
 
-建立薄的 `main.py`、`gui/main_window.py` 及實際存在的 Page。`main.py` 只負責 application、data path、settings、window 與 event loop。
+Repository privacy、移除既有敏感檔與 rewrite Git history 是外部維護工作，不屬於 application development step；執行前需另行確認與備份。
 
-完成條件：`python main.py` 能開啟首頁，並可進入月曆、歷史案件與設定。
+## Step 1 — Case lifecycle and Case Workspace
 
-## 3. Step 2：GUI 基礎
-
-使用 layout manager，完成 DPI、GUI scale、快捷鍵、Ctrl+滑鼠滾輪、window geometry 與 QSettings。高倍率頁面須可捲動。
-
-完成條件：關閉重開後保留 UI state，主要頁面無明顯重疊或裁切。
-
-## 4. Step 3：預約與 Intake
-
-### 月曆
-
-完成月份切換、選取日期、顯示當日案件與建立案件入口。
-
-### 照片建案
-
-責任流程固定為：
+**Status: CURRENT**
 
 ```text
-intake/ocr.py
-→ structured OCR result
-→ intake/reservation.py normalize
-→ data/inbox/<temporary-id>/parsed.json
-→ GUI 人工確認
-→ cases/service.py
+New Case
+→ 選擇 E05 / E07 / E27
+→ manual 或 OCR
+→ review
+→ 明確儲存
+→ 立即出現在正確 History
+→ 開啟 Case Workspace
 ```
 
-OCR 不得建立 Case 或寫 `case.json`。人工確認以前，資料只能存在 inbox staging。
+Workspace 提供「基本資料、歷史資料、本次量測、不確定度、產生報告、刪除案件」。基本資料沿用現有表單，其他區可先作 placeholder；header 顯示 Case ID、system、DUT 與 status。
 
-欄位解析應優先取得前次報告編號，供後續歷史案件查找；照片中不存在或無法可靠辨識的 LIMS 欄位保持空白，不以猜測補值。
+Case 實體改按 system 分組為 `<data_root>/cases/<system>/<case_id>/`，不預建空子目錄。刪除必須確認、只刪選定 Case、刷新 History 並回到有效畫面。此步不做 uncertainty 或 report generation。
 
-完成條件：照片能產生 staging、表單可修改，且尚未按儲存時不會產生正式 Case。
+**Complete when:** manual/OCR 兩條路徑都先選 system；儲存後可從正確 system History 重新開啟 workspace；safe deletion 通過測試。
 
-## 5. Step 4：Case model、storage 與建案
+## Step 2 — Historical/reference import and Case snapshot
 
-- `cases/model.py`：描述 Case。
-- `cases/storage.py`：Case folder、JSON load/save、複製 reservation files。
-- `cases/service.py`：產生 ID、建立與確認 Case。
-- `gui/pages/case_page.py`：只負責可編輯表單。
+**Status: NEXT**
 
-建立：
+支援來源：previous managed Case，以及 imported legacy reference。使用者選定後：
 
 ```text
-data/cases/<year>/<system>/<case_id>/case.json
+copy previous raw/report
+→ current Case/reference/
 ```
 
-若由照片建立，確認後將 staging 中的 `original.<ext>` 與 `parsed.json` 複製到 Case `reservation/`。
+保存最小 `meta.json` provenance。Case 沒有 reference 仍可工作，也可在建立後再選。此步不清理／解讀 raw data，不編輯 DOCX，且永不修改 reference snapshot。
 
-完成條件：可人工或由照片建立 Case、儲存、關閉並重新開啟；GUI 不包含 JSON serialization。
+**Complete when:** 兩種來源都能產生獨立 snapshot；原始來源移動或改變後，Case-local reference 仍可用。
 
-## 6. Step 5：System configuration
+## Step 3 — Define canonical raw-data format
 
-建立 `systems/loader.py`，集中讀寫及驗證 `config/systems/<system>/`。GUI 不直接序列化設定 JSON。
+**Status: LATER**
 
-每個 E05、E07、E27 系統提供：
+必須使用真實 E27 歷史 raw data，先辨認 reusable structure 與 previous measurement values，再定義如何產生不含舊觀測值的本次 template。之後才更新 `measurement_schema.json` 與 canonical `measurement/raw.csv`；不得預造最終 CSV schema。
+
+**Complete when:** 格式由實際 E27 資料驗證，歷史測值不會進入本次 measurement。
+
+## Step 4 — Measurement Workspace
+
+**Status: LATER**
+
+實作左側唯讀 previous/reference、右側可編輯 current measurement、結果區 current processed result。歷史 raw data 與 report 必須容易外部開啟；本次資料只存入 Case。
+
+**Complete when:** reference 保持唯讀，本次輸入可保存並重開。
+
+## Step 5 — Calculation and uncertainty
+
+**Status: LATER**
+
+優先完成 E27 的第一條 direct-measurement end-to-end flow：
 
 ```text
-system.json
-capability.json
-pricing.json
-measurement_schema.json
+measurement/raw.csv
+→ processing
+→ result
+→ uncertainty
+→ expanded uncertainty
 ```
 
-設定畫面保留可編輯位置，讓使用者填寫能力範圍、計價規則及量測輸入規格。尚未取得正式數值時保留空規則與待確認備註，不自行假設。
+只實作真實資料需要的 mathematical primitives。`calculation.json` 只供參數與 declarative configuration，不執行任意 expression。
 
-校正點來源規則同時固定為：
+**Complete when:** E27 可由 Case-local data 重算結果與 expanded uncertainty，且 calculation code 不依賴 GUI。
 
-1. 優先使用本次客戶指定的校正點。
-2. 若沒有，使用前次報告的校正點。
-3. 只有前次報告編號、但點位尚未匯入時，提醒使用者匯入或人工確認。
-4. 本次與前次點位都沒有時，明確提醒使用者，不靜默建立預設點。
+## Step 6 — Report generation
 
-完成條件：主程式與 GUI 不寫死 E05/E07/E27 技術規則；設定可編輯、驗證及重載；校正點缺漏有明確提示；且沒有 E05Manager 等空殼 class。
-
-## 7. Step 6：Case-specific uncertainty
-
-建立 Case 時把 system uncertainty template 複製到 Case。先完成讀取、編輯與保存；完整計算仍不實作。
-
-完成條件：Case 可修改自己的 uncertainty 與單一／分 range DUT resolution，不影響 system template。
-
-## 8. Step 7：多日量測
-
-功能出現時建立 `measurement/storage.py`；只有真正需要資料處理時才建立 `processing.py`。
+**Status: LATER**
 
 ```text
-measurement/day_01/environment.json
-measurement/day_01/raw.csv
+reference report
+→ copy
+→ current report
+→ 修改 current copy
 ```
 
-完成條件：可新增多個量測日、保存與重新載入環境及 raw data；GUI 不自行讀寫 CSV。
+永不修改 reference report。current report 使用 Case、current measurement result 與 uncertainty；沒有 previous report 時允許推薦或另選同 system template。不要求內嵌 Word editor。
 
-## 9. Step 8：History index
+**Complete when:** 可產生獨立 current report，reference hash/content 保持不變。
 
-Case 與量測格式穩定後建立 `history/index.py`。SQLite 只保存搜尋欄位與 Case path，Case folder 仍是 source of truth。
+## Step 7 — E05 / E07 / E27 specific refinement
 
-完成條件：可依報告編號、序號、客戶、型號搜尋；刪除 SQLite 後可重建。
+**Status: LATER**
 
-## 10. Step 9：歷史資料匯入
+通用流程完成後，才依實際程序加入 system-specific calculation。沒有真實需求就不建立特殊 abstraction。
 
-History 只回傳找到的 Case；選擇性匯入與檔案複製由 Case service 處理。所有匯入值可修改，參考文件複製到 Case `reference/`。
+## Step 8 — Historical automation / convenience
 
-完成條件：沒有歷史資料仍可完成新 Case，且匯入不依賴原案件的永久路徑。
+**Status: LATER**
 
-## 11. Step 10：能力驗證與報價
+視實際工作證明有用時再加入 previous-Case matching、raw normalization、template selection 與 comparison convenience。自動推薦只能 advisory，不能阻擋新 DUT 或取代人工選擇。
 
-建立 `systems/capability.py`、`systems/pricing.py` 及真正使用的 config。客戶指定「同前次報告」時，以歷史校正點作來源並要求確認，不另建 workflow。
+## Step 9 — LIMS integration
 
-完成條件：顯示可做／超出能力的校正點及預估報價，使用者仍可修改校正點。
+**Status: LATER**
 
-## 12. Step 11：Uncertainty calculation
+LIMS integration 保持在 core measurement 與 uncertainty logic 之外，不得成為 Case workflow 的前置條件。
 
-建立 `uncertainty/engine.py`，計算 A 類、系統共通 B 類、DUT resolution、每案額外 B 類、combined 與 expanded uncertainty。
-
-完成條件：只靠 Case 內資料即可重算，不 import GUI，不把複雜公式語言塞進 JSON。
-
-## 13. Step 12：Report generation
-
-建立 `reports/generator.py`，由 Case、measurement、processed data、uncertainty 與正式 template 產生 DOCX/PDF。
-
-完成條件：Case 能由自己的資料產生報告；report notes 仍保存在 Case，不另建第二份 source of truth。
-
-## 14. Step 13：Legacy import 與外部自動化
-
-需要時才建立 `legacy/excel.py`、`legacy/word.py`，只解析舊檔並回傳資料。Case service 決定如何 copy、normalize、save；不得修改原始檔。
-
-最後才評估 LIMS 自動填表與其他外部整合，不讓它們成為核心 Case workflow 的前置條件。

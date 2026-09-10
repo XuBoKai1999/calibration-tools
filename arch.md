@@ -1,248 +1,237 @@
 # 校正文件管理工具架構
 
-## 1. 目標與生命週期
-
-建立以 PySide6 GUI 操作的校正案件管理工具，先支援 E05（直流高壓）、E07（交流高壓）與 E27（片電阻）。
+## 1. 穩定產品流程
 
 ```text
-預約 → 建案 → 收件 → 量測 → 計算 → 報告 → 結案
+New Case
+→ 選擇校正系統
+→ 輸入基本資料
+→ 建立 Case
+→ 取得可用的前次／參考資料
+→ 本次量測
+→ 計算與不確定度
+→ 產生報告
+→ 保存完整 Case
 ```
 
-| 階段 | 主要功能 |
-| --- | --- |
-| 預約 | 月曆、查看空檔、案件排程 |
-| 建案 | 預約單圖片、OCR、人工確認、歷史搜尋、能力驗證、報價 |
-| 收件 | 報告編號、確認 DUT、校正點與解析度 |
-| 量測 | 多日資料、環境條件、raw data、歷史 raw data 對照 |
-| 計算 | 數據整理、A 類、B 類、DUT resolution、擴充不確定度 |
-| 報告 | report notes、template、欄位填入、DOCX/PDF |
-| 結案 | 狀態更新、保存、歷史索引 |
+目前支援 E05、E07、E27；現階段一律視為直接量測系統。差異先由 capability、pricing、measurement schema、calculation configuration 與 output quantities 表達。只有未來確有不同演算法時，才考慮 system-specific code；不預建 E05/E07/E27 class hierarchy。
 
-橫跨生命週期的功能包括 Case storage、system configuration、history/index、settings、legacy import、file preview/open 與 GUI navigation。
+## 2. 核心原則與依賴
 
-## 2. 核心原則
+> 如無必要勿增實體。
 
-### 2.1 Case 是正式資料核心
-
-一個校正案件是一個 `Case`，並對應一個獨立資料夾。Case 資料夾中的 JSON、CSV 與文件是 source of truth；SQLite 未來只作可重建的搜尋索引。
-
-### 2.2 Template、歷史資料與 OCR 都只是來源
-
-```text
-System Template ─┐
-History ─────────┼→ 人工確認 → Case
-OCR staging ─────┘
-```
-
-所有帶入值皆可人工修改。建立 Case 後，實際工作只使用 Case 內版本；外部 template 或歷史檔案的變動不得污染既有案件。
-
-### 2.3 如無必要勿增實體
-
-先定義完整責任邊界，但只有功能實際出現時才建立 module 或 class。簡單函式、dataclass、JSON、CSV 足以完成時，不引入 ORM、workflow engine、event bus、DI、web API、plugin system 或 background service。
-
-不要因為名稱整齊就預建 `Manager`、`Controller`、`Repository`、`Factory` 或空目錄；也不能以精簡為由把不同責任塞回 `main.py`。
-
-## 3. Dependency direction
+Case folder 中的資料是 source of truth。SQLite 若出現，只作可重建索引。功能尚未出現時不建立空 module，也不引入 Manager、Controller、Repository、Factory、DTO、ORM、workflow engine 或 event bus。
 
 ```text
 GUI
  ↓
-Case / Intake / Measurement / History / Reports
+Cases / Intake / Measurement / History / Reports
  ↓
 Storage / System Config
 ```
 
-禁止反向依賴：OCR、storage、uncertainty、report 不得 import GUI。業務邏輯與檔案處理必須能在沒有 GUI 的環境下測試。
+storage、OCR、measurement、uncertainty、report 不得 import GUI。`main.py` 只負責建立 application、少量 application-level dependency、主視窗及 event loop。
+
+## 3. 建案與 Case Workspace
+
+### 3.1 New Case
+
+```text
+Home
+↓
+New Case
+↓
+選擇 E05 / E07 / E27
+↓
+選擇 manual entry 或 OCR reservation form
+↓
+檢查／修改基本資料
+↓
+明確儲存並建立 Case
+↓
+立即出現在所選系統的 History
+↓
+開啟 Case Workspace
+```
+
+OCR 只是填入 Case 基本資料的方法之一，不定義 Case lifecycle，也不應暗中決定 system。system 從建案開始就是 Case identity 的一部分。OCR staging 未經人工確認不得成為正式 Case 資料；低信心欄位留白。
+
+### 3.2 Case Workspace
+
+開啟 Case 後進入可工作的 workspace，而非只顯示基本資料的 dead end：
+
+```text
+基本資料 | 歷史資料 | 本次量測 | 不確定度 | 產生報告 | 刪除案件
+```
+
+畫面至少清楚顯示 Case ID、system、DUT／item name，以及適用時的 status。既有基本資料表單成為「基本資料」區；尚未實作的區域可暫作 placeholder。
+
+刪除案件是危險操作：必須確認、只刪選定 Case、刷新 History，並回到有效畫面。不為此建立 CaseManager。
 
 ## 4. 程式責任
 
-完整責任地圖如下；這是 architecture definition，不代表所有 module 現在都必須存在。
+| 責任 | 位置 | 規則 |
+| --- | --- | --- |
+| bootstrap | `main.py` | 不含業務、I/O 或頁面實作 |
+| GUI | `gui/` | 顯示、輸入、navigation、window-level orchestration |
+| Case | `cases/model.py` | Case 資料模型 |
+| Case storage | `cases/storage.py` | folder、JSON、Case-local file copy |
+| Case operations | `cases/service.py` | 建立、儲存及 Case-level operations |
+| OCR | `intake/ocr.py` | image → structured OCR result |
+| reservation intake | `intake/reservation.py` | normalize、欄位 mapping、staging |
+| system config | `systems/loader.py` | 集中讀寫與驗證設定 |
+| future features | `measurement/`、`uncertainty/`、`history/`、`reports/`、`legacy/` | 功能首次出現時才建立 |
+
+GUI 編輯既有 Case 時只更新自己負責的欄位，不得 reconstruct 後消滅未顯示資料。Case loader 必須拒絕不支援的 schema version 與未知頂層欄位，不能 silent data loss。
+
+## 5. Runtime storage
+
+Runtime data 位於作業系統 application data 目錄，不放進 Git repository。目標結構依 system 分組：
 
 ```text
-src/calibration_manager/
-├── gui/
-│   ├── main_window.py
-│   ├── pages/
-│   │   ├── home_page.py
-│   │   ├── calendar_page.py
-│   │   ├── history_page.py
-│   │   └── case_page.py
-│   └── dialogs/
-│       └── system_settings_dialog.py
+<data_root>/
+├── inbox/
 ├── cases/
-│   ├── model.py
-│   ├── storage.py
-│   └── service.py
-├── intake/
-│   ├── ocr.py
-│   └── reservation.py
-├── measurement/                 # 實作量測時建立
-│   ├── storage.py
-│   └── processing.py
-├── uncertainty/                 # 實作不確定度時建立
-│   └── engine.py
-├── systems/
-│   ├── loader.py
-│   ├── capability.py            # 實作能力判定時才建立
-│   └── pricing.py               # 實作報價運算時才建立
-├── history/                     # 實作索引時建立
-│   └── index.py
-├── reports/                     # 實作報告時建立
-│   └── generator.py
-├── legacy/                      # 實作舊檔匯入時建立
-│   ├── excel.py
-│   └── word.py
-└── settings.py
+│   ├── E05/<case_id>/
+│   ├── E07/<case_id>/
+│   └── E27/<case_id>/
+├── references/
+│   ├── E05/
+│   ├── E07/
+│   └── E27/
+└── index/                 # 真正建立索引時才出現
 ```
 
-### 4.1 `main.py`
+- `cases/`：本 application 正式管理的校正案件。
+- `references/`：application 出現以前的歷史材料，或另行維護的歷史來源／archive。
+- historical reference 不會自動變成 Case，也不為了套入 Case model 而製造假 Case。
 
-`main.py` 只作 application bootstrap：建立 `QApplication`、設定 application identity 與 data path、建立 `MainWindow`、啟動 event loop。它不知道 OCR、Case JSON、E05 規則、不確定度或報告如何運作。
+成熟 Case 的概念結構：
 
-### 4.2 `gui/`
+```text
+cases/<system>/<case_id>/
+├── case.json
+├── reservation/
+├── reference/
+│   ├── meta.json
+│   ├── raw.<format>
+│   └── report.docx
+├── measurement/
+│   ├── raw.csv
+│   └── result.json
+└── report/
+    └── <current-report>.docx
+```
 
-只負責顯示資料、接收輸入、切頁並呼叫其他模組。`MainWindow` 管主框架、navigation、window geometry 與 GUI scale；各 Page 管自己的 layout、widgets 與頁面內互動。GUI 不自行序列化 JSON 或計算 uncertainty。
+不預建空目錄；只在實際需要時建立。測試使用 temporary directory 與虛構資料，真實預約單及案件資料不得作 fixture。
 
-### 4.3 `cases/`
+## 6. Historical/reference material
 
-- `model.py`：定義 `Case` 及其 customer、instrument、status、schedule、calibration request 等資料。
-- `storage.py`：Case folder、`case.json` load/save、複製檔案進 Case。
-- `service.py`：建立 Case、產生 Case ID、確認並儲存 Case、Case 級操作。
+來源可為前一個 managed Case，或 `references/<system>/` 中的 legacy item。使用者選定後，raw data 與 report 必須複製到當前 Case，不能只記外部路徑：
 
-若其中一個檔案日後再混合兩個明顯責任才繼續拆；不增加 CaseManager、CaseRepository 等同義包裝。
+```text
+historical source
+      ↓ copy
+current Case/reference/
+```
 
-### 4.4 `intake/`
+Case-local `reference/` 是該案件實際採用的 immutable snapshot；global `references/` 是 archive/source。不得原地修改 `reference/` 內檔案。沒有歷史材料時 Case 仍須可用，且建立後也能稍後選擇 reference。
 
-- `ocr.py`：只做 `image → structured OCR result`。
-- `reservation.py`：預約單欄位 mapping、normalize、缺欄位處理與 staging。
+`reference/meta.json` 只保存必要 provenance，例如：
 
-OCR 不建立 Case、不寫 `case.json`、不決定 Case folder，也不更新 GUI。
+```json
+{
+  "source_type": "case or legacy_reference",
+  "source_id": "...",
+  "previous_report_number": "...",
+  "raw_file": "...",
+  "report_file": "..."
+}
+```
 
-預約單欄位 mapping 優先保留前次報告編號，因其會用於歷史案件查找與校正點參考。照片沒有提供或辨識信心不足的 LIMS 欄位（例如校正者、執行部門、載運方式、英文抬頭）維持空白，交由人工確認，不推測填值。
+不為這份 metadata 建立 ReferenceManager。
 
-### 4.5 後續責任
+選擇訊號可包括 previous report number、相同 DUT／serial number、manual selection 與同 system 近期項目。建議順序是「相同 DUT／明確報告 → 使用者選擇 → 近期同系統」，但自動推薦只能 advisory；使用者能接受、另選或完全不使用 reference，新 DUT 不得被阻擋。
 
-- `measurement/`：量測日、`environment.json`、`raw.csv` 與 raw data processing；不計算 uncertainty。
-- `uncertainty/`：A 類、B 類、DUT resolution、combined 與 expanded uncertainty。
-- `systems/`：載入 system config、能力與報價；不建立 E05/E07/E27 class，除非未來確有不同演算法。
-- `history/`：建立、重建及查詢 SQLite index；只回答找到哪些 Case，不負責匯入。
-- `reports/`：由 Case、processed data、uncertainty 與 template 產生 DOCX/PDF；report notes 仍屬 Case data。
-- `legacy/`：解析舊 Excel/Word；只回傳解析資料，由 Case service 決定匯入與保存。
-- `settings.py`：少量 QSettings key、GUI scale、window geometry 與 data path policy；不建立 settings manager。
+## 7. Measurement workspace 與 raw data reuse
 
-### 4.6 System configuration 的可維護性
+```text
+┌────────────────────────┬────────────────────────┐
+│ Previous / Reference   │ Current Measurement    │
+│ read-only              │ editable               │
+│ old raw data / report  │ current raw data       │
+└────────────────────────┴────────────────────────┘
+                ↓
+       processed result
+                ↓
+           uncertainty
+```
 
-每個系統至少保留三種可由使用者維護的規格：
+Qt widget 與精確 layout 不屬於架構規格；必要行為是左側可查看／開啟唯讀歷史 raw data 與 report，右側輸入本次量測，結果區顯示本次 processed values 與 uncertainty。
+
+`reference/raw.*` 與 `measurement/raw.csv` 永遠是不同檔案。若沿用前次結構，只保留 calibration points、measurement configuration 與 field structure，必須移除前次 observations、measured values 與 calculated results；歷史數值不得靜默變成本次數值。
+
+最終 canonical CSV 尚未定義，必須由真實 E27 歷史 raw data 決定，本文件不預造 schema。
+
+## 8. System configuration
 
 ```text
 config/systems/<system>/
-├── capability.json          # 能力範圍、限制與備註
-├── pricing.json             # 計價規則、幣別與備註
-└── measurement_schema.json  # 量測輸入欄位規格
+├── system.json
+├── capability.json
+├── pricing.json
+├── measurement_schema.json
+└── calculation.json
 ```
 
-設定畫面必須提供讀取、編輯、驗證及儲存位置。尚未確認的實際能力或價格使用空規則與「待確認」備註，不得杜撰數值。GUI 不自行讀寫 JSON，而是呼叫 `systems/loader.py`。
+| 檔案 | 責任 |
+| --- | --- |
+| `capability.json` | range、quantities、restrictions、valid coverage |
+| `pricing.json` | pricing／service rules |
+| `measurement_schema.json` | 量測資料結構；不是歷史或本次量測值 |
+| `calculation.json` | output/measurand、所需參數、uncertainty components、現有 B 類標準不確定度 |
 
-### 4.7 校正點來源
+設定只提供 declarative parameters 與 calculation primitives；計算仍由程式碼實作。禁止以 JSON 儲存任意 Python expression 或使用 `eval()`。
 
-校正點來源依序為：
+## 9. Measurement、uncertainty 與 report
 
 ```text
-本次客戶指定校正點
-→ 若無，使用前次報告的校正點
-→ 若兩者都無，提醒使用者補充
+raw observations
+→ measurement processing
+→ measurement result
+→ uncertainty calculation
+→ combined standard uncertainty
+→ expanded uncertainty
 ```
 
-只有前次報告編號但尚未取得前次校正點時，狀態仍是「等待匯入／確認」，不能把報告編號當作校正點，也不能靜默產生預設點。自動帶入的前次點位仍可人工修改。
+第一版只實作真實程序需要的 primitive，例如 mean、standard deviation、Type A、DUT resolution、rectangular distribution、system B-type standard uncertainty、expanded-to-standard conversion、RSS 與 expanded uncertainty。regression、divider equation、ratio/phase error、correlation 與特殊 correction model 等，等實際 system requirement 出現才加入。
 
-## 5. 資料架構
+前次 report 永不直接修改：
 
 ```text
-data/
-├── inbox/
-├── cases/
-└── index/                       # 建立歷史索引時才出現
-
-config/
-└── systems/
-    ├── E05/{system,capability,pricing,measurement_schema}.json
-    ├── E07/{system,capability,pricing,measurement_schema}.json
-    └── E27/{system,capability,pricing,measurement_schema}.json
-
-templates/                       # 建立正式報告模板時才出現
+case/reference/report.docx
+→ copy
+case/report/<current-report>.docx
+→ 修改 current copy
 ```
 
-上述目錄都只在真正寫入資料時建立，不預建大量空目錄。
+current report 未來可填 current customer、DUT、report number、calibration date、measurement results、expanded uncertainty 與 notes。新 DUT 沒有前次 report 時，可推薦同 system 的近期 template，但使用者可另選。現階段允許用外部程式開啟 DOCX，不要求內嵌 Word viewer/editor。
 
-### 5.1 OCR staging 與建案
+## 10. 實作狀態
 
-```text
-照片
- ↓
-data/inbox/<temporary-id>/
-├── original.<ext>
-└── parsed.json
- ↓
-人工確認與修改
- ↓
-Case service
- ├── storage 寫入 case.json
- └── storage 複製 reservation files
-```
+### 已實作
 
-`parsed.json` 是暫存辨識結果，不是正式 Case 資料。人工確認後的表單值才寫入 `case.json`。
+- 薄 `main.py`、主要 GUI pages、navigation、GUI scale 與 QSettings。
+- Case model/storage/service、人工與 OCR 基本資料建案。
+- OCR confidence filtering 與 staging cleanup。
+- Case non-destructive GUI update、schema-version 與未知頂層欄位保護。
+- E05/E07/E27 基本 config 載入、編輯與最低語意驗證。
+- runtime data 移出 repository。
 
-### 5.2 Case folder
+### 穩定目標但尚未完成
 
-```text
-data/cases/<year>/<system>/<case_id>/
-├── case.json
-├── reservation/
-│   ├── original.<ext>
-│   └── parsed.json
-├── reference/
-├── measurement/
-│   └── day_01/
-│       ├── environment.json
-│       └── raw.csv
-├── uncertainty/
-│   └── uncertainty.json
-├── processed/
-└── report/
-    ├── report.docx
-    └── report.pdf
-```
-
-只在使用時建立子目錄。大型 raw data 不放進 `case.json`；環境 metadata 不塞進 CSV 前幾列。
-
-### 5.3 功能與資料對應
-
-| 功能 | 程式 | 資料 |
-| --- | --- | --- |
-| OCR | `intake/ocr.py` | `data/inbox/` |
-| 預約解析 | `intake/reservation.py` | staging `parsed.json`、Case `reservation/` |
-| Case | `cases/` | `case.json` |
-| 多日量測 | `measurement/` | `measurement/` |
-| uncertainty | `uncertainty/` | `uncertainty/` |
-| 歷史搜尋 | `history/` | `data/index/` |
-| 系統能力與報價 | `systems/` | `config/systems/` |
-| report | `reports/` | `report/`、`templates/` |
-| legacy | `legacy/` | Case `reference/` |
-
-## 6. GUI 規則
-
-- 使用 PySide6 layout manager，避免大量 absolute positioning。
-- 支援 Windows DPI scaling、GUI scale、快捷鍵與 Ctrl+滑鼠滾輪。
-- 使用 `QSettings` 記住倍率、主視窗大小與位置。
-- 高倍率或小視窗使用 scroll area，不能出現明顯 overlap 或文字裁切。
-- OCR、自動帶入與歷史匯入的資料都必須可人工覆寫。
-
-## 7. 完成條件
-
-- 沒有歷史案件時仍可完整工作。
-- 每個 Case 都能獨立保存、載入與重現。
-- template 更新不影響既有 Case。
-- OCR 未經人工確認不成為正式資料。
-- Case storage、uncertainty、pricing 與 report generation 可脫離 GUI 測試。
-- SQLite 刪除後可由 Case folders 重建。
-- E05、E07、E27 共用主架構，但保留各自設定與計算差異。
+- 先選 system 的完整 New Case flow 與 Case Workspace。
+- Case 實體路徑由目前的年度層改為 `cases/<system>/<case_id>/`。
+- safe deletion、references archive、Case-local reference snapshot。
+- canonical measurement format、measurement workspace、calculation、uncertainty 與 report generation。
+- `calculation.json`。
