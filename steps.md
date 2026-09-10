@@ -39,6 +39,8 @@ Case 實體改按 system 分組為 `<data_root>/cases/<system>/<case_id>/`，不
 
 **Complete when:** manual/OCR 兩條路徑都先選 system；儲存後可從正確 system History 重新開啟 workspace；safe deletion 通過測試。
 
+實作與自動測試已完成；待使用者依實際桌面流程驗收後，才將本 Step 標為 DONE 並推進 Step 2。
+
 ## Step 2 — Historical/reference import and Case snapshot
 
 **Status: NEXT**
@@ -120,4 +122,3 @@ reference report
 **Status: LATER**
 
 LIMS integration 保持在 core measurement 與 uncertainty logic 之外，不得成為 Case workflow 的前置條件。
-

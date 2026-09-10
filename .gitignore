@@ -1,2 +1,7 @@
 /past data and report/
-
+__pycache__/
+*.py[cod]
+.venv/
+.env
+data/
+*.tmp

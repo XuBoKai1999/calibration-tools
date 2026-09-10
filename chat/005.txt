@@ -1,0 +1,25 @@
+1. 修改檔案：`cases/storage.py`、`cases/service.py`、`gui/main_window.py`、`gui/pages/home_page.py`、`history_page.py`、`case_page.py`、新增 `gui/dialogs/new_case_dialog.py`、更新 `tests/test_cases.py`、`tests/test_main.py`、`arch.md` 與 `steps.md`。
+
+2. Case storage 已由 `cases/<year>/<system>/<case_id>/` 改為 `cases/<system>/<case_id>/`；Case ID 仍保留年度，且每年序號仍從 `00001` 開始。
+
+3. New Case 已改成先選 E05／E07／E27，再選手動或 OCR。所選 system 為 authoritative；OCR 不會覆寫 system，明確儲存前不會建立 `case.json`。
+
+4. Case Workspace 現有「基本資料、歷史資料、本次量測、不確定度、產生報告」tabs；後四區按 Step 1 保持明確 placeholder。Header 顯示 Case ID、system、DUT 與 status，並可返回首頁或 History。
+
+5. 刪除案件必須經確認；只刪選定 Case directory，成功後立即刷新 History 並返回 History。取消刪除及刪除其中一案不影響其他案件均有測試。
+
+6. 舊路徑 migration 使用「複製到 `.migrating` → SHA-256 驗證完整目錄 → rename 成正式目的地 → 才刪來源」。目的地或暫存路徑碰撞時明確失敗並保留來源。
+
+7. 測試新增／更新：新 storage path、跨年編號、舊路徑 migration、collision、單案刪除、取消刪除、system-first dialog、OCR 不覆寫 system、儲存前不落盤、History 即時刷新／雙擊重開、Workspace navigation，以及既有 non-destructive editing。
+
+8. 完整測試結果：23/23 通過。
+
+9. Dependency direction：乾淨；`cases/intake/systems` 沒有 import GUI 或 PySide6。
+
+10. GUI 驗證：應用程式實際啟動成功；Workspace 於 150% 完成 render 檢查，無明顯 overlap；實際 OCR review 驗證選 E05 後仍保持 E05、未儲存前無 Case、關閉後 staging 清除。Qt interaction tests 已走過 History 重開、tabs 切換與刪除後重新載入。native desktop automation 沒有暴露可操作視窗，因此無法誠實宣稱完成真人滑鼠逐項驗收。
+
+11. 未完成：只剩你指定的實際桌面手動驗收。Step 2 的 references、raw data、report copy、measurement、uncertainty 全部未開始。
+
+12. `steps.md` 尚未推進：Step 1 保持 CURRENT，並記錄「實作與自動測試完成，待使用者桌面驗收」；Step 2 仍是 NEXT。
+
+文件 checkpoint commit 已建立：`736b4cc`，只包含先前的 `arch.md` 與 `steps.md` 更新。

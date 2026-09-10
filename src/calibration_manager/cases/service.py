@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 from calibration_manager.cases.model import Case
 from calibration_manager.cases.storage import (
@@ -6,6 +7,7 @@ from calibration_manager.cases.storage import (
     case_file,
     copy_reservation_into_case,
     load_case,
+    migrate_old_cases,
     write_case,
 )
 
@@ -13,13 +15,14 @@ from calibration_manager.cases.storage import (
 def create_case(cases_root: Path, date: str, system: str, supported_systems: set[str]) -> Case:
     if system not in supported_systems:
         raise ValueError(f"不支援的校正系統：{system}")
+    migrate_old_cases(cases_root)
     year = date[:4]
     numbers = []
-    system_dir = cases_root / year / system
+    system_dir = cases_root / system
     if system_dir.exists():
         for path in system_dir.iterdir():
             match = CASE_ID_PATTERN.fullmatch(path.name)
-            if match:
+            if match and match.group(1) == year:
                 numbers.append(int(match.group(3)))
     case_id = f"{year}-{system}-{max(numbers, default=0) + 1:05d}"
     return Case(case_id=case_id, system=system, schedule={
@@ -29,9 +32,11 @@ def create_case(cases_root: Path, date: str, system: str, supported_systems: set
 
 def save_case(case: Case, cases_root: Path, reservation_staging: Path | None = None) -> Path:
     _set_calibration_source(case)
-    path = write_case(case, cases_root)
     if reservation_staging:
         copy_reservation_into_case(case, cases_root, reservation_staging)
+    path = write_case(case, cases_root)
+    if reservation_staging:
+        shutil.rmtree(reservation_staging)
     return path
 
 

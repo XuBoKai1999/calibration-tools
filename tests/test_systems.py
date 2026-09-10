@@ -23,14 +23,31 @@ class SystemConfigTest(unittest.TestCase):
             folder = root / "E05"
             folder.mkdir()
             path = folder / "pricing.json"
-            path.write_text('{"system":"E05","rules":[]}', encoding="utf-8")
-            updated = {"system": "E05", "rules": [{"description": "人工輸入"}]}
+            path.write_text(
+                '{"schema_version":1,"system":"E05","currency":"TWD","rules":[],"notes":""}',
+                encoding="utf-8",
+            )
+            updated = {
+                "schema_version": 1,
+                "system": "E05",
+                "currency": "TWD",
+                "rules": [{"description": "人工輸入"}],
+                "notes": "",
+            }
 
             save_system_config_text(root, "E05", "pricing", json.dumps(updated))
 
             self.assertEqual(load_system_config(root, "E05", "pricing"), updated)
             with self.assertRaisesRegex(ValueError, "system 必須是 E05"):
-                save_system_config_text(root, "E05", "pricing", '{"system":"E07"}')
+                save_system_config_text(
+                    root, "E05", "pricing",
+                    '{"schema_version":1,"system":"E07","currency":"TWD","rules":[],"notes":""}',
+                )
+            with self.assertRaisesRegex(ValueError, "rules"):
+                save_system_config_text(
+                    root, "E05", "pricing",
+                    '{"schema_version":1,"system":"E05","currency":"TWD","rules":"bad","notes":""}',
+                )
 
 
 if __name__ == "__main__":

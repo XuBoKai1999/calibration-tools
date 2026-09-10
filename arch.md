@@ -227,11 +227,12 @@ current report 未來可填 current customer、DUT、report number、calibration
 - Case non-destructive GUI update、schema-version 與未知頂層欄位保護。
 - E05/E07/E27 基本 config 載入、編輯與最低語意驗證。
 - runtime data 移出 repository。
+- 先選 system 的 manual/OCR New Case flow 與 Case Workspace shell。
+- Case 路徑 `cases/<system>/<case_id>/`、舊年度路徑安全移轉及單一 Case 刪除。
+- persisted Case 儲存後立即更新 Calendar／History，並可重新開啟。
 
 ### 穩定目標但尚未完成
 
-- 先選 system 的完整 New Case flow 與 Case Workspace。
-- Case 實體路徑由目前的年度層改為 `cases/<system>/<case_id>/`。
-- safe deletion、references archive、Case-local reference snapshot。
+- references archive、Case-local reference snapshot。
 - canonical measurement format、measurement workspace、calculation、uncertainty 與 report generation。
 - `calculation.json`。

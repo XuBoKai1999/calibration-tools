@@ -1,0 +1,9 @@
+1. `arch.md`：加入完整 Case workflow、Case Workspace、system-grouped storage、references archive、Case-local immutable snapshot、左舊右新量測流程、raw data reuse、`calculation.json` 與報告複製規則；並區分已實作、穩定目標及未來功能。
+
+2. `steps.md`：重整為 `DONE / CURRENT / NEXT / LATER`，目前以 Step 1「Case lifecycle and Case Workspace」為 CURRENT，後續依序為 reference snapshot、E27 raw-data schema、量測、不確定度及報告。
+
+3. 現況衝突：
+   - Case 路徑目前仍是 `cases/<year>/<system>/<case_id>/`。
+   - 尚未完成「Home → 先選 system → manual/OCR」流程。
+   - Case 頁尚未成為完整 Workspace。
+   - History 即時建案整合、案件刪除、global `references/`、reference snapshot 與 `calculation.json` 尚未實作。

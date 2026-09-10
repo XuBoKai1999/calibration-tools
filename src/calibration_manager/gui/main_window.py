@@ -4,6 +4,7 @@ from PySide6.QtCore import QDate, QEvent, QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -15,7 +16,8 @@ from PySide6.QtWidgets import (
 
 from calibration_manager.cases.model import Case
 from calibration_manager.cases.service import calibration_warning, create_case, load_case_by_id, save_case
-from calibration_manager.cases.storage import load_all_cases
+from calibration_manager.cases.storage import delete_case, load_all_cases
+from calibration_manager.gui.dialogs.new_case_dialog import NewCaseDialog
 from calibration_manager.gui.dialogs.system_settings_dialog import SystemSettingsDialog
 from calibration_manager.gui.pages.case_page import CasePage
 from calibration_manager.gui.pages.calendar_page import CalendarPage
@@ -28,7 +30,7 @@ from calibration_manager.settings import (
     SCALE_STEP,
     WINDOW_GEOMETRY_KEY,
 )
-from calibration_manager.intake.reservation import stage_reservation_photo
+from calibration_manager.intake.reservation import discard_reservation_staging, stage_reservation_photo
 from calibration_manager.systems.loader import load_systems
 
 
@@ -65,16 +67,23 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.pages)
 
         self.home_page.calendar_requested.connect(lambda: self.show_page(self.calendar_page))
+        self.home_page.new_case_requested.connect(
+            lambda: self.open_new_case_dialog(QDate.currentDate())
+        )
         self.home_page.history_requested.connect(lambda: self.show_page(self.history_page))
         self.home_page.settings_requested.connect(self.open_settings)
         self.calendar_page.home_requested.connect(lambda: self.show_page(self.home_page))
-        self.calendar_page.new_case_requested.connect(self.start_new_case)
-        self.calendar_page.photo_requested.connect(self.choose_reservation_photo)
+        self.calendar_page.new_case_requested.connect(self.open_new_case_dialog)
+        self.calendar_page.photo_requested.connect(
+            lambda date: self.open_new_case_dialog(date, "ocr")
+        )
         self.calendar_page.open_case_requested.connect(self.open_case)
         self.history_page.home_requested.connect(lambda: self.show_page(self.home_page))
+        self.history_page.open_case_requested.connect(self.open_case)
         self.case_page.home_requested.connect(lambda: self.show_page(self.home_page))
+        self.case_page.history_requested.connect(self.show_history)
         self.case_page.save_requested.connect(self.save_current_case)
-        self.case_page.system_changed.connect(self.change_new_case_system)
+        self.case_page.delete_requested.connect(self.confirm_delete_case)
         self.refresh_cases()
 
         self.build_zoom_controls()
@@ -91,24 +100,38 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentWidget(page)
 
     def refresh_cases(self) -> None:
-        self.calendar_page.set_cases(load_all_cases(self.cases_root))
+        cases = load_all_cases(self.cases_root)
+        self.calendar_page.set_cases(cases)
+        self.history_page.set_cases(cases)
 
-    def start_new_case(self, date: QDate) -> None:
+    def open_new_case_dialog(self, date: QDate, initial_method: str = "manual") -> None:
+        dialog = NewCaseDialog(self.systems, initial_method, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        system, method = dialog.selection()
+        if method == "ocr":
+            self.choose_reservation_photo(date, system)
+        else:
+            self.start_new_case(date, system)
+
+    def start_new_case(self, date: QDate, system: str | None = None) -> None:
+        self.discard_pending_reservation()
         self.pending_reservation = None
+        system = system or self.systems[0]["code"]
         case = create_case(
-            self.cases_root, date.toString(Qt.ISODate), self.systems[0]["code"], self.system_codes
+            self.cases_root, date.toString(Qt.ISODate), system, self.system_codes
         )
         self.case_page.set_case(case, is_new=True)
         self.show_page(self.case_page)
 
-    def choose_reservation_photo(self, date: QDate) -> None:
+    def choose_reservation_photo(self, date: QDate, system: str) -> None:
         filename, _ = QFileDialog.getOpenFileName(
             self, "選擇預約單照片", "", "影像 (*.jpg *.jpeg *.png *.bmp *.tif *.tiff)"
         )
         if filename:
-            self.import_reservation_photo(Path(filename), date)
+            self.import_reservation_photo(Path(filename), date, system)
 
-    def import_reservation_photo(self, path: Path, date: QDate) -> None:
+    def import_reservation_photo(self, path: Path, date: QDate, system: str) -> None:
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             staging_dir, draft = stage_reservation_photo(path, self.inbox_root)
@@ -117,16 +140,9 @@ class MainWindow(QMainWindow):
             return
         finally:
             QApplication.restoreOverrideCursor()
-        self.start_new_case(date)
+        self.start_new_case(date, system)
         self.pending_reservation = staging_dir
         self.case_page.apply_ocr_fields(draft["fields"])
-
-    def change_new_case_system(self, system: str) -> None:
-        if self.case_page.is_new:
-            date = self.case_page.reserved_date.date().toString(Qt.ISODate)
-            self.case_page.case_id.setText(
-                create_case(self.cases_root, date, system, self.system_codes).case_id
-            )
 
     def save_current_case(self, case: Case) -> None:
         try:
@@ -141,10 +157,34 @@ class MainWindow(QMainWindow):
         self.refresh_cases()
 
     def open_case(self, case_id: str) -> None:
-        self.pending_reservation = None
+        self.discard_pending_reservation()
         case = load_case_by_id(self.cases_root, case_id)
         self.case_page.set_case(case)
         self.show_page(self.case_page)
+
+    def show_history(self, system: str | None = None) -> None:
+        self.refresh_cases()
+        if system:
+            self.history_page.select_system(system)
+        self.show_page(self.history_page)
+
+    def confirm_delete_case(self, case_id: str) -> None:
+        answer = QMessageBox.question(
+            self,
+            "刪除案件",
+            f"確定要永久刪除 {case_id}？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            delete_case(self.cases_root, case_id)
+        except OSError as error:
+            QMessageBox.critical(self, "無法刪除案件", str(error))
+            return
+        self.refresh_cases()
+        self.show_history()
 
     def build_zoom_controls(self) -> None:
         zoom_out = QPushButton("−")
@@ -190,5 +230,11 @@ class MainWindow(QMainWindow):
         return super().eventFilter(watched, event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.discard_pending_reservation()
         self.settings.setValue(WINDOW_GEOMETRY_KEY, self.saveGeometry())
         super().closeEvent(event)
+
+    def discard_pending_reservation(self) -> None:
+        if self.pending_reservation:
+            discard_reservation_staging(self.pending_reservation, self.inbox_root)
+            self.pending_reservation = None

@@ -3,15 +3,18 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from PySide6.QtCore import QDate, QPoint, QPointF, QSettings, Qt
 from PySide6.QtGui import QShortcut, QWheelEvent
-from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QTabWidget
+from PySide6.QtWidgets import QApplication, QLineEdit, QListWidget, QMessageBox, QPushButton, QTabWidget
 
 from calibration_manager.gui.main_window import MainWindow
+from calibration_manager.cases.model import Case
+from calibration_manager.gui.dialogs.new_case_dialog import NewCaseDialog
 
 
 class MainWindowTest(unittest.TestCase):
@@ -24,7 +27,16 @@ class MainWindowTest(unittest.TestCase):
             settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
             window = MainWindow(settings, Path(directory) / "data")
         labels = {button.text() for button in window.findChildren(QPushButton)}
-        self.assertTrue({"月曆", "歷史案件", "設定"}.issubset(labels))
+        self.assertTrue({"建立新案件", "月曆", "歷史案件", "設定"}.issubset(labels))
+
+    def test_new_case_dialog_selects_system_before_input_method(self):
+        dialog = NewCaseDialog([
+            {"code": "E05", "name": "直流高壓"},
+            {"code": "E27", "name": "片電阻"},
+        ])
+        dialog.system.setCurrentIndex(dialog.system.findData("E27"))
+        dialog.ocr.setChecked(True)
+        self.assertEqual(dialog.selection(), ("E27", "ocr"))
 
     def test_calendar_and_history_navigation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -93,12 +105,13 @@ class MainWindowTest(unittest.TestCase):
             root = Path(directory) / "data"
             settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
             window = MainWindow(settings, root)
-            window.start_new_case(QDate(2026, 9, 9))
+            window.start_new_case(QDate(2026, 9, 9), "E27")
             self.assertIs(window.pages.currentWidget(), window.case_page)
+            self.assertFalse((root / "cases" / "E27").exists())
             window.case_page.customer.setText("測試客戶")
             window.case_page.model.setText("MODEL-1")
             window.case_page.apply_ocr_fields({
-                "system": "E27",
+                "system": "E05",
                 "previous_report_number": "E240540A",
             })
             case = window.case_page.case_data()
@@ -113,6 +126,96 @@ class MainWindowTest(unittest.TestCase):
             self.assertEqual(reopened.case_page.model.text(), "MODEL-1")
             self.assertEqual(reopened.case_page.previous_report.text(), "E240540A")
             self.assertFalse(reopened.case_page.system.isEnabled())
+
+    def test_created_case_appears_in_history_and_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "data"
+            settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
+            window = MainWindow(settings, root)
+            window.start_new_case(QDate(2026, 9, 9), "E27")
+            window.case_page.customer.setText("虛構客戶")
+            case = window.case_page.case_data()
+
+            window.save_current_case(case)
+            window.show_history("E27")
+
+            case_list = window.history_page.lists["E27"]
+            self.assertEqual(case_list.count(), 1)
+            self.assertIn(case.case_id, case_list.item(0).text())
+            case_list.itemDoubleClicked.emit(case_list.item(0))
+            self.assertIs(window.pages.currentWidget(), window.case_page)
+            self.assertEqual(window.case_page.workspace_tabs.count(), 5)
+            self.assertIn(case.case_id, window.case_page.identity.text())
+            window.case_page.workspace_tabs.setCurrentIndex(1)
+            window.case_page.workspace_tabs.setCurrentIndex(2)
+            window.case_page.workspace_tabs.setCurrentIndex(3)
+            window.case_page.workspace_tabs.setCurrentIndex(0)
+            window.case_page.history_requested.emit()
+            self.assertIs(window.pages.currentWidget(), window.history_page)
+
+    def test_confirmed_delete_refreshes_history_and_keeps_other_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "data"
+            settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
+            window = MainWindow(settings, root)
+            window.start_new_case(QDate(2026, 9, 9), "E27")
+            first = window.case_page.case_data()
+            window.save_current_case(first)
+            window.start_new_case(QDate(2026, 9, 10), "E27")
+            second = window.case_page.case_data()
+            window.save_current_case(second)
+            window.open_case(first.case_id)
+
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                window.confirm_delete_case(first.case_id)
+
+            self.assertIs(window.pages.currentWidget(), window.history_page)
+            texts = [
+                window.history_page.lists["E27"].item(i).text()
+                for i in range(window.history_page.lists["E27"].count())
+            ]
+            self.assertFalse(any(first.case_id in text for text in texts))
+            self.assertTrue(any(second.case_id in text for text in texts))
+
+    def test_cancelled_delete_keeps_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "data"
+            settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
+            window = MainWindow(settings, root)
+            window.start_new_case(QDate(2026, 9, 9), "E05")
+            case = window.case_page.case_data()
+            window.save_current_case(case)
+
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.No):
+                window.confirm_delete_case(case.case_id)
+
+            self.assertTrue((root / "cases" / "E05" / case.case_id / "case.json").exists())
+
+    def test_editing_case_preserves_fields_not_shown_in_gui(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = QSettings(f"{directory}/settings.ini", QSettings.IniFormat)
+            window = MainWindow(settings, Path(directory) / "data")
+            case = Case(
+                "2026-E05-00001",
+                "E05",
+                schedule={
+                    "reserved_date": "2026-09-09",
+                    "received_date": "2026-09-15",
+                    "completed_date": "2026-09-18",
+                    "future_schedule_field": "keep",
+                },
+                customer={"internal_note": "keep"},
+            )
+            window.case_page.set_case(case)
+            window.case_page.customer.setText("修改後客戶")
+
+            updated = window.case_page.case_data()
+
+            self.assertIs(updated, case)
+            self.assertEqual(updated.schedule["received_date"], "2026-09-15")
+            self.assertEqual(updated.schedule["completed_date"], "2026-09-18")
+            self.assertEqual(updated.schedule["future_schedule_field"], "keep")
+            self.assertEqual(updated.customer["internal_note"], "keep")
 
 
 if __name__ == "__main__":

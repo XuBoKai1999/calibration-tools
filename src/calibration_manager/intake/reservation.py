@@ -8,6 +8,9 @@ from pathlib import Path
 from calibration_manager.intake.ocr import parse_image
 
 
+MIN_AUTO_FILL_CONFIDENCE = 0.6
+
+
 @dataclass(frozen=True)
 class Token:
     text: str
@@ -15,6 +18,7 @@ class Token:
     top: float
     right: float
     bottom: float
+    confidence: float = 1.0
 
     @property
     def center_y(self) -> float:
@@ -37,6 +41,9 @@ def stage_reservation_photo(image_path: Path, inbox_root: Path) -> tuple[Path, d
 
 
 def parse_reservation_tokens(tokens: list[Token]) -> dict:
+    tokens = [token for token in tokens if token.confidence >= MIN_AUTO_FILL_CONFIDENCE]
+    if not tokens:
+        return {}
     width = max(token.right for token in tokens)
 
     def first(label: str) -> Token | None:
@@ -130,8 +137,18 @@ def _tokens_from_ocr(result: dict) -> list[Token]:
     for item in result["tokens"]:
         box = item["box"]
         tokens.append(Token(item["text"], min(p[0] for p in box), min(p[1] for p in box),
-                            max(p[0] for p in box), max(p[1] for p in box)))
+                            max(p[0] for p in box), max(p[1] for p in box),
+                            float(item.get("confidence", 0))))
     return tokens
+
+
+def discard_reservation_staging(staging_dir: Path, inbox_root: Path) -> None:
+    staging = staging_dir.resolve()
+    inbox = inbox_root.resolve()
+    if staging.parent != inbox:
+        raise ValueError("拒絕刪除 inbox 以外的暫存資料")
+    if staging.exists():
+        shutil.rmtree(staging)
 
 
 def _table_column(tokens: list[Token], labels: tuple[str, ...], index: int, end_label: str) -> str:

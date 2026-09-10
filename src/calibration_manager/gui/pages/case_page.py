@@ -1,4 +1,4 @@
-from PySide6.QtCore import QDate, Signal
+from PySide6.QtCore import QDate, Signal, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -18,20 +19,31 @@ from calibration_manager.cases.model import Case
 
 class CasePage(QWidget):
     home_requested = Signal()
+    history_requested = Signal()
     save_requested = Signal(object)
-    system_changed = Signal(str)
+    delete_requested = Signal(str)
 
     def __init__(self, systems: list[dict]):
         super().__init__()
+        self._case: Case | None = None
         self.is_new = False
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
         back = QPushButton("返回首頁")
         back.clicked.connect(self.home_requested.emit)
         header.addWidget(back)
-        header.addWidget(QLabel("案件基本資料"))
+        history = QPushButton("返回歷史案件")
+        history.clicked.connect(self.history_requested.emit)
+        header.addWidget(history)
+        header.addWidget(QLabel("Case Workspace"))
         header.addStretch()
         layout.addLayout(header)
+        self.identity = QLabel()
+        layout.addWidget(self.identity)
+
+        self.workspace_tabs = QTabWidget()
+        basic_page = QWidget()
+        basic_layout = QVBoxLayout(basic_page)
 
         form_widget = QWidget()
         form = QFormLayout(form_widget)
@@ -40,9 +52,6 @@ class CasePage(QWidget):
         self.system = QComboBox()
         for item in systems:
             self.system.addItem(f"{item['code']}－{item['name']}", item["code"])
-        self.system.currentIndexChanged.connect(
-            lambda: self.system_changed.emit(self.system.currentData())
-        )
         self.status = QComboBox()
         self.status.addItems(["reserved", "received", "in_progress", "completed"])
         self.reserved_date = QDateEdit(calendarPopup=True)
@@ -93,15 +102,31 @@ class CasePage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(form_widget)
-        layout.addWidget(scroll)
+        basic_layout.addWidget(scroll)
 
-        save = QPushButton("儲存案件")
-        save.clicked.connect(lambda: self.save_requested.emit(self.case_data()))
-        layout.addWidget(save)
+        self.save_button = QPushButton("儲存案件")
+        self.save_button.clicked.connect(lambda: self.save_requested.emit(self.case_data()))
+        basic_layout.addWidget(self.save_button)
         self.message = QLabel()
-        layout.addWidget(self.message)
+        basic_layout.addWidget(self.message)
+        self.workspace_tabs.addTab(basic_page, "基本資料")
+        for title, message in (
+            ("歷史資料", "歷史／參考資料將於 Step 2 實作"),
+            ("本次量測", "本次量測功能尚未實作"),
+            ("不確定度", "不確定度計算尚未實作"),
+            ("產生報告", "報告產生功能尚未實作"),
+        ):
+            placeholder = QLabel(message)
+            placeholder.setAlignment(Qt.AlignCenter)
+            self.workspace_tabs.addTab(placeholder, title)
+        layout.addWidget(self.workspace_tabs)
+
+        self.delete_button = QPushButton("刪除案件")
+        self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.case_id.text()))
+        layout.addWidget(self.delete_button)
 
     def set_case(self, case: Case, is_new: bool = False) -> None:
+        self._case = case
         self.is_new = False
         self.case_id.setText(case.case_id)
         self.system.setCurrentIndex(self.system.findData(case.system))
@@ -125,7 +150,14 @@ class CasePage(QWidget):
         self.calibration_notes.setPlainText(case.calibration_request.get("notes", ""))
         self.report_notes.setPlainText("\n".join(case.report.get("notes", [])))
         self.is_new = is_new
-        self.system.setEnabled(is_new)
+        self.system.setEnabled(False)
+        self.save_button.setText("建立案件" if is_new else "儲存案件")
+        self.delete_button.setEnabled(not is_new)
+        self.identity.setText(
+            f"{case.case_id}　|　{case.system}　|　"
+            f"{case.instrument.get('name', '') or '未填 DUT'}　|　{case.status}"
+        )
+        self.workspace_tabs.setCurrentIndex(0)
         self.message.clear()
 
     def apply_ocr_fields(self, fields: dict) -> None:
@@ -146,10 +178,6 @@ class CasePage(QWidget):
         for name, widget in widgets.items():
             if fields.get(name):
                 widget.setText(fields[name])
-        if fields.get("system"):
-            index = self.system.findData(fields["system"])
-            if index >= 0:
-                self.system.setCurrentIndex(index)
         if fields.get("calibration_notes"):
             self.calibration_notes.setPlainText(fields["calibration_notes"])
         if fields.get("previous_report_number"):
@@ -157,40 +185,36 @@ class CasePage(QWidget):
         self.message.setText("影像辨識完成；請逐欄確認後再儲存案件")
 
     def case_data(self) -> Case:
-        return Case(
-            case_id=self.case_id.text(),
-            system=self.system.currentData(),
-            status=self.status.currentText(),
-            customer={
-                "name": self.customer.text().strip(),
-                "tax_id": self.tax_id.text().strip(),
-                "contact": self.contact.text().strip(),
-                "phone": self.phone.text().strip(),
-                "fax": self.fax.text().strip(),
-                "postal_code": self.postal_code.text().strip(),
-                "email": self.email.text().strip(),
-                "address": self.address.text().strip(),
-            },
-            instrument={
-                "name": self.instrument_name.text().strip(),
-                "brand": self.brand.text().strip(),
-                "model": self.model.text().strip(),
-                "serial_number": self.serial_number.text().strip(),
-            },
-            schedule={
-                "reserved_date": self.reserved_date.date().toString("yyyy-MM-dd"),
-                "received_date": None,
-                "completed_date": None,
-            },
-            report={
-                "previous_report_number": self.previous_report.text().strip(),
-                "current_report_number": self.current_report.text().strip(),
-                "notes": [line for line in self.report_notes.toPlainText().splitlines() if line],
-            },
-            calibration_request={
-                "mode": "specified_points",
-                "reference_report": None,
-                "points": [line for line in self.calibration_points.toPlainText().splitlines() if line],
-                "notes": self.calibration_notes.toPlainText().strip(),
-            },
-        )
+        if self._case is None:
+            raise ValueError("尚未載入案件")
+        case = self._case
+        case.case_id = self.case_id.text()
+        case.system = self.system.currentData()
+        case.status = self.status.currentText()
+        case.customer.update({
+            "name": self.customer.text().strip(),
+            "tax_id": self.tax_id.text().strip(),
+            "contact": self.contact.text().strip(),
+            "phone": self.phone.text().strip(),
+            "fax": self.fax.text().strip(),
+            "postal_code": self.postal_code.text().strip(),
+            "email": self.email.text().strip(),
+            "address": self.address.text().strip(),
+        })
+        case.instrument.update({
+            "name": self.instrument_name.text().strip(),
+            "brand": self.brand.text().strip(),
+            "model": self.model.text().strip(),
+            "serial_number": self.serial_number.text().strip(),
+        })
+        case.schedule["reserved_date"] = self.reserved_date.date().toString("yyyy-MM-dd")
+        case.report.update({
+            "previous_report_number": self.previous_report.text().strip(),
+            "current_report_number": self.current_report.text().strip(),
+            "notes": [line for line in self.report_notes.toPlainText().splitlines() if line],
+        })
+        case.calibration_request.update({
+            "points": [line for line in self.calibration_points.toPlainText().splitlines() if line],
+            "notes": self.calibration_notes.toPlainText().strip(),
+        })
+        return case

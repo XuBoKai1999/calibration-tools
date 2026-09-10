@@ -1,0 +1,35 @@
+已完成第一輪 targeted hardening，沒有重做架構或新增抽象層。
+
+完成項目：
+
+- Runtime `data/` 改至 Windows application data 目錄。
+- `.gitignore` 排除 `data/`、Python cache、虛擬環境及暫存檔。
+- GUI 修改案件改為更新原 Case，只變更畫面負責的欄位。
+- 保留 `received_date`、`completed_date` 及未知的巢狀資料。
+- Case 載入會拒絕不支援的 `schema_version`。
+- Case 頂層出現未知欄位時拒絕載入，避免舊程式存檔時偷偷刪除新版資料。
+- capability、pricing、measurement schema 加入最低限度語意驗證。
+- OCR Token 現在保留 confidence；低於 `0.6` 的 token 不會自動填入。
+- OCR regression test 改用虛構 Token，不再讀取真實預約單。
+- reservation 成功存入 Case 後會刪除 staging。
+- 使用者放棄 OCR 建案、開啟其他案件或關閉程式時，也會清除 pending staging。
+- 文件同步加入資料安全與非破壞式更新規則。
+
+驗證結果：
+
+- 16 項測試全部通過。
+- dependency direction 檢查乾淨。
+- GUI 實際啟動成功。
+
+目前仍未執行：
+
+- GitHub 改 Private。
+- 刪除目前已被 Git 追蹤的真實圖片、staging 與 `.xlsx`。
+- rewrite Git history。
+- 建立 synthetic OCR 圖片 integration fixture。
+- 改變 Case ID 年份定義。
+- 擴充 E05／E07 OCR 自動分類。
+
+前面三項涉及外部狀態或不可逆歷史改寫，需要你明確授權。現有 repo 仍追蹤真實資料；新增 `.gitignore` 只能防止未來新增，不能移除已提交內容。
+
+Ponytail 原則的影響是：修補都放在既有責任位置，沒有新增 `DataManager`、migration framework、OCR service 或 staging manager。

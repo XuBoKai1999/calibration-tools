@@ -1,6 +1,9 @@
 from dataclasses import asdict, dataclass, field
 
 
+SUPPORTED_SCHEMA_VERSION = 1
+
+
 @dataclass
 class Case:
     case_id: str
@@ -15,11 +18,17 @@ class Case:
     calibration_request: dict = field(default_factory=lambda: {
         "mode": "unspecified", "reference_report": None, "points": [], "notes": ""
     })
-    schema_version: int = 1
+    schema_version: int = SUPPORTED_SCHEMA_VERSION
 
     @classmethod
     def from_dict(cls, data: dict) -> "Case":
-        return cls(**{name: data[name] for name in cls.__dataclass_fields__ if name in data})
+        version = data.get("schema_version", 1)
+        if version != SUPPORTED_SCHEMA_VERSION:
+            raise ValueError(f"不支援的 Case schema_version：{version}")
+        unknown = set(data) - set(cls.__dataclass_fields__)
+        if unknown:
+            raise ValueError(f"Case 含有目前版本不認識的欄位：{', '.join(sorted(unknown))}")
+        return cls(**data)
 
     def to_dict(self) -> dict:
         return asdict(self)

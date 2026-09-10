@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 
 class HomePage(QWidget):
+    new_case_requested = Signal()
     calendar_requested = Signal()
     history_requested = Signal()
     settings_requested = Signal()
@@ -12,6 +13,7 @@ class HomePage(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("校正文件管理工具"))
         for title, signal in (
+            ("建立新案件", self.new_case_requested),
             ("月曆", self.calendar_requested),
             ("歷史案件", self.history_requested),
             ("設定", self.settings_requested),
