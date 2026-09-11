@@ -32,6 +32,29 @@ Storage / System Config
 
 storage、OCR、measurement、uncertainty、report 不得 import GUI。`main.py` 只負責建立 application、少量 application-level dependency、主視窗及 event loop。
 
+### 2.1 資料責任
+
+歷史 raw workbook 不再被視為可重建完整 Case 的權威來源。各層責任如下：
+
+```text
+Reservation / Case JSON
+    customer、DUT、request-specific data
+
+Measurement / RAW
+    actual observations，以及解讀 observation 必需的 section/run/setup 語意
+
+System Revision
+    有效期間內的 standards/references、證書快照、程序、計算／不確定度及報告規則
+
+Derived
+    由 Measurement + Case + System Revision 重算的結果
+
+Report
+    依 system／measurement section／template 有條件地呈現上述資料
+```
+
+Report 是 output view，不是 canonical data store。Case JSON 仍是 Case-specific structured data 的 source of truth；同一資料不另建 report metadata database。
+
 ## 3. 建案與 Case Workspace
 
 ### 3.1 New Case
@@ -55,6 +78,8 @@ New Case
 ```
 
 OCR 只是填入 Case 基本資料的方法之一，不定義 Case lifecycle，也不應暗中決定 system。system 從建案開始就是 Case identity 的一部分。OCR staging 未經人工確認不得成為正式 Case 資料；低信心欄位留白。
+
+Case 描述「這個 customer、DUT 與 calibration request」：Case/work-order ID、reservation/customer reference、DUT identity、requested services/sections、optional customer accessory 與 Case notes。它不保存 laboratory-wide standards 或固定 uncertainty rules，也不要求建案時具備所有可能的 report fields；section-specific 必填條件延後到實際產報告時判定。
 
 ### 3.2 Case Workspace
 
@@ -135,7 +160,9 @@ past/<system>/clean/<reference_id>/
 └── report.docx            # 有合適來源或核准轉換時才有
 ```
 
-`raw.csv` 以 `run_id`、`point_id`、`repeat_index` 保留量測層級；必要時加 `setup_id`、`mode`、`date`。`context.csv` 固定為 scoped long form：`scope_type,scope_id,key,value,unit,note,source`。E05、E07、E27 的 RAW 欄位依各自 `clean-schema.md` 定義，不建立萬用 schema。缺少 raw/context/report 合法，並由 manifest 明記；未知格式或欄位必須 fail／unresolved，不以成功率換取 silent data loss。
+`raw.csv` 以 `run_id`、`point_id`、`repeat_index` 保留量測層級；必要時加 `setup_id`、`mode`、`date`。歷史清理只從 raw workbook 擷取不可替代的 observation，以及解讀 observation 必需的最小 section/run/setup 語意。不得因 Excel 中存在 customer/DUT、完整 instrument inventory、追溯表、固定 uncertainty、helper、prior result 或 report-layout 資料，就擴張 raw parser 以重建完整 Case。
+
+`context.csv` 固定為 scoped long form：`scope_type,scope_id,key,value,unit,note,source`，但它是 canonical package 的承載能力，不代表所有 context 都應由 raw workbook 取得。未來如需歷史 Case/report reconstruction，應先依最低 report variables，從可信 Case/reservation 或小型 report parser 補入必要資料。E05、E07、E27 的 RAW 欄位依各自 `clean-schema.md` 定義，不建立萬用 schema。缺少 raw/context/report 合法，並由 manifest 明記；未知 measurement 語意必須 fail／unresolved，不以成功率換取 silent data loss。
 
 完整 cross-system invariant 與 system schema 分別見 `past/canonical-format.md`、`past/E05/clean-schema.md`、`past/E07/clean-schema.md`、`past/E27/clean-schema.md`。
 
@@ -205,6 +232,10 @@ config/systems/<system>/
 
 設定只提供 declarative parameters 與 calculation primitives；計算仍由程式碼實作。禁止以 JSON 儲存任意 Python expression 或使用 `eval()`。
 
+上述現有 config layout 不等於未來 revision 檔案設計。未來 Case／measurement execution 必須綁定一個 controlled System Revision；revision 有明確有效期間、可在年中變更，且 Settings 後續修改不得改寫既有 Case。它概念上擁有可用 standards/references、序號與 certificate snapshot/value/uncertainty、applicability/range rules、procedure/evaluation revision、calculation/uncertainty/coverage/conversion/correction rules，以及 report-template revision 與固定 wording。現在不先設計 revision JSON。
+
+System Revision 擁有「可用標準與選用規則」；measurement execution 依 method/range 解決並記錄實際使用的標準。正常 Case 不要求使用者逐筆手輸 standard ID，實際使用結果仍須可稽核。E27 五顆 standard resistor 是 revision inventory，每案只記錄實際選用的一顆。
+
 ## 9. Measurement、uncertainty 與 report
 
 ```text
@@ -218,6 +249,26 @@ raw observations
 
 第一版只實作真實程序需要的 primitive，例如 mean、standard deviation、Type A、DUT resolution、rectangular distribution、system B-type standard uncertainty、expanded-to-standard conversion、RSS 與 expanded uncertainty。regression、divider equation、ratio/phase error、correlation 與特殊 correction model 等，等實際 system requirement 出現才加入。
 
+Derived values 由 Measurement + Case + bound System Revision 重算；mean、conversion、ratio/phase result、correction、Type A、combined/expanded uncertainty 與 report result table 不因出現在報告中就成為 Case input。
+
+一個 Case/report 可包含一個或多個 measurement sections，例如 DC high voltage、AC high voltage、voltage-transformer ratio/phase 或 AC voltage transfer。section 是資料概念，不新增 manager/workflow framework；每個 section 決定自己的 observation/setup 與 report-required fields。
+
+產生報告時採 conditional field resolution：
+
+```text
+selected report template / sections
+→ required variables
+→ Case JSON / reservation-derived Case data
+→ measurement data / context
+→ bound System Revision
+→ derived result
+→ 仍缺少時才提示使用者提供或確認
+```
+
+使用者不必在建案時填完所有可能欄位。E05 customer meter、E07 ratio/excitation/burden/frequency、E27 conductivity/orientation/diameter/thickness 等，只在適用 section/template 中成為必填。經確認的 Case-specific 缺值可在未來寫回 Case JSON；不另建 report metadata database。
+
+Reservation/intake 是 customer、contact、recipient、DUT identity、requested service/points、special requirements 與 planned date 的優先來源。已有 Case/reservation data 時，不回頭以 dirty historical raw Excel 作主要來源。
+
 前次 report 永不直接修改：
 
 ```text
@@ -227,7 +278,9 @@ case/report/<current-report>.docx
 → 修改 current copy
 ```
 
-current report 未來可填 current customer、DUT、report number、calibration date、measurement results、expanded uncertainty 與 notes。新 DUT 沒有前次 report 時，可推薦同 system 的近期 template，但使用者可另選。現階段允許用外部程式開啟 DOCX，不要求內嵌 Word viewer/editor。
+reference report 可供比較，但不作 current report 的 canonical data source。報告 template/section 定義其變數需求；current report 由 Case、Measurement、System Revision 與 Derived 組成。新 DUT 沒有前次 report 時仍可產報告；現階段允許用外部程式開啟 DOCX，不要求內嵌 Word viewer/editor。
+
+歷史 report parser 若後續證明必要，只回收 application/template 真正需要而其他來源缺少的 Case metadata，例如 DUT/report metadata、customer accessory、E27 material/geometry 或特殊 notes；不建立通用 Word parser，也不重建固定 prose。
 
 ## 10. 實作狀態
 

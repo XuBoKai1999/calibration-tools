@@ -21,7 +21,7 @@ Repository privacy、移除既有敏感檔與 rewrite Git history 是外部維�
 
 ## Step 1 — Case lifecycle and Case Workspace
 
-**Status: CURRENT**
+**Status: AWAITING INDEPENDENT DESKTOP ACCEPTANCE**
 
 ```text
 New Case
@@ -61,13 +61,51 @@ Case 實體改按 system 分組為 `<data_root>/cases/<system>/<case_id>/`，不
 
 ## Data preparation — Representative cleaner validation
 
-**Status: CURRENT — REVISED PROTOTYPE OUTPUT AWAITING FINAL HUMAN REVIEW**
+**Status: PAUSED — REVISED PROTOTYPE OUTPUT AWAITING FINAL HUMAN REVIEW**
 
 依每個 audited generation 選最多 2～3 件代表樣本，實作 cleaner dry-run；逐件人工比對 source 與 clean，加入 invariant／round-trip tests。遇到未知 sheet、side table、欄位、單位或 mapping 必須 fail／unresolved，不得靜默略過。代表樣本核准前不得批次轉換 2,918 份 workbook。
 
 針對人工驗收發現的 context/provenance 問題已修正於 `tools/historical_cleaner.py`。同一組 14 件只重新產生於 ignored `past/_dryrun/`：10 件 `PASS_WITH_UNRESOLVED`、4 件 `FAIL_AMBIGUOUS`，沒有 unconditional PASS。完整 repository tests 38/38 通過。下一步依 `past/_dryrun/manual-review.md` 重驗八件；production batch 仍禁止。
 
 **Complete when:** 每個支援 generation 的代表 package 通過人工比對及自動 invariant tests，且所有不支援結構明確失敗或列為 unresolved。
+
+## Data preparation — Report fields and system revisions
+
+**Status: DONE**
+
+已完成 recent report audit：E05 24 件、E07 24 件、E27 19 件可用 DOCX。結果支持 RAW / CASE / SYSTEM_REVISION / DERIVED / STATIC_TEMPLATE 分層；E05 證實 2025 年 9 月中有非年度 revision 邊界，selected standard 應為 Case reference，標準器與證書本體屬 revision。2024 legacy `.doc` 尚無可用語意讀取途徑。下一步先 review audit，再定 minimum CASE contract 與 revision-selection semantics；尚不建立 revision JSON。
+
+## Data preparation — Architecture realignment
+
+**Status: DONE**
+
+已將 report-driven 結論寫回 `arch.md` 與 historical canonical/clean-schema 說明：raw workbook 不重建完整 Case；Reservation/Case、Measurement、System Revision、Derived、Report 各自負責不同資料；報告只要求實際 section/template 所需欄位，缺值才提示使用者。
+
+## Data preparation — Minimum report-variable contracts
+
+**Status: CURRENT — SPECIFICATION ONLY**
+
+下一步按 E05/E07/E27 的實際 measurement section 定義最小 report variables，逐欄標明來自 Case JSON、Measurement、System Revision、Derived 或互動補值，並同時定義 revision identity/effective-date selection semantics。不要建立 Settings/revision JSON，也不要實作 parser/UI。
+
+**Complete when:** 每個 observed report section 的條件必填欄位與來源責任明確，且 combined E05/E07 report 能分別綁定其適用 revision。
+
+## Data preparation — Simplify historical cleaner target
+
+**Status: NEXT**
+
+依 report-variable contract 縮減 cleaner：raw workbook 只保留 irreducible observations 與必要 setup semantics；Case/report metadata 只在確有最低報告需求且其他來源缺少時另由小型 report parser 回收。先重做代表樣本驗收，再考慮 batch/quarantine。
+
+## Data preparation — Case/report field resolution
+
+**Status: THEN**
+
+規格化 report generation 如何依序從 Case JSON、Measurement、bound System Revision、Derived 取得 required variables，並只提示仍缺少的欄位；確認值適合時寫回 Case JSON。不另建 report metadata database。
+
+## Data preparation — Versioned System Settings
+
+**Status: THEN**
+
+在 field ownership 與 revision binding 核准後，才設計可年中生效且不回溯改寫舊 Case 的 System Revision／Settings。此階段才決定實體格式，不預設 `2024.json`／`2025.json`／`2026.json`。
 
 ## Step 2 — Historical/reference import and Case snapshot
 
@@ -122,14 +160,7 @@ measurement/raw.csv
 
 **Status: LATER**
 
-```text
-reference report
-→ copy
-→ current report
-→ 修改 current copy
-```
-
-永不修改 reference report。current report 使用 Case、current measurement result 與 uncertainty；沒有 previous report 時允許推薦或另選同 system template。不要求內嵌 Word editor。
+依 applicable template/measurement sections 取得 required variables，依序由 Case JSON、Measurement、bound System Revision 與 Derived 解決，只要求使用者補齊仍缺少的條件欄位，再產生獨立 current report。reference report 永不修改，且不是 current report 的資料來源；沒有 previous report 也能工作。不要求內嵌 Word editor。
 
 **Complete when:** 可產生獨立 current report，reference hash/content 保持不變。
 
