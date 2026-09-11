@@ -43,17 +43,35 @@ Case 實體改按 system 分組為 `<data_root>/cases/<system>/<case_id>/`，不
 
 ## Data preparation — Historical schema audit
 
-**Status: NEXT**
+**Status: DONE**
 
 在實作 reference import 或 canonical format 前，先唯讀審查 E05／E07／E27 的代表性 `past/<system>/source/` 真實檔案，辨識結構世代、RAW、Case／環境／setup、system／calculation config、derived 及 unresolved 欄位。特別查明 E05 客戶儀器資訊來源與 E07 burden／frequency／range 的層級。
 
 本任務只產生審查結果；審核前不 batch-clean，不實作 measurement、uncertainty 或 report generation。
 
-**Complete when:** 三系統的代表性結構、欄位分類、report-only 資訊、未解問題，以及三檔命名提案是否足夠均有可人工審閱的記錄。
+三系統與跨系統結果已記錄於 `past/E05/schema-audit.md`、`past/E07/schema-audit.md`、`past/E27/schema-audit.md`、`past/schema-comparison.md`，並已完成人工 review。
+
+**Complete when:** 三系統的代表性結構、欄位分類、report-only 資訊、未解問題，以及三檔命名提案是否足夠均有可人工審閱的記錄。（已完成）
+
+## Data preparation — Canonical historical format
+
+**Status: DONE**
+
+已核定一筆一目錄的 package：`manifest.json` 必有，`raw.csv`、`context.csv`、`report.docx` 依來源存在。RAW 一個 observation 一列；CONTEXT 使用 scoped long form；system/procedure CONFIG 與可重算 DERIVED 不重複進 Case。規格見 `past/canonical-format.md` 與三系統 `clean-schema.md`。
+
+## Data preparation — Representative cleaner validation
+
+**Status: CURRENT — REVISED PROTOTYPE OUTPUT AWAITING FINAL HUMAN REVIEW**
+
+依每個 audited generation 選最多 2～3 件代表樣本，實作 cleaner dry-run；逐件人工比對 source 與 clean，加入 invariant／round-trip tests。遇到未知 sheet、side table、欄位、單位或 mapping 必須 fail／unresolved，不得靜默略過。代表樣本核准前不得批次轉換 2,918 份 workbook。
+
+針對人工驗收發現的 context/provenance 問題已修正於 `tools/historical_cleaner.py`。同一組 14 件只重新產生於 ignored `past/_dryrun/`：10 件 `PASS_WITH_UNRESOLVED`、4 件 `FAIL_AMBIGUOUS`，沒有 unconditional PASS。完整 repository tests 38/38 通過。下一步依 `past/_dryrun/manual-review.md` 重驗八件；production batch 仍禁止。
+
+**Complete when:** 每個支援 generation 的代表 package 通過人工比對及自動 invariant tests，且所有不支援結構明確失敗或列為 unresolved。
 
 ## Step 2 — Historical/reference import and Case snapshot
 
-**Status: AFTER AUDIT**
+**Status: AFTER REPRESENTATIVE CLEANER VALIDATION**
 
 支援來源：previous managed Case，以及 imported legacy reference。使用者選定後：
 

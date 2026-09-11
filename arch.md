@@ -101,7 +101,7 @@ Runtime data 固定放在 repository-local `data/`，方便人工檢查，但整
 - `cases/`：本 application 正式管理的校正案件。
 - `staging/`：OCR 臨時工作資料；成功建案或放棄後清除，不是正式 Case 資料。
 - `past/<system>/source/`：application 出現以前的歷史原始材料；位於 runtime `data/` 之外，且永遠唯讀。
-- `past/<system>/clean/`：只放經審核同意的 canonical cleaned output；目前為空。
+- `past/<system>/clean/`：只放依 `past/canonical-format.md` 產生且經人工驗證的 canonical historical packages；在代表樣本 cleaner 完成驗證前不得批次填入。
 - historical reference 不會自動變成 Case，也不為了套入 Case model 而製造假 Case。
 
 成熟 Case 的概念結構：
@@ -124,6 +124,20 @@ cases/<system>/<case_id>/
 不預建空目錄；只在實際需要時建立。測試使用 temporary directory 與虛構資料，真實預約單及案件資料不得作 fixture。
 
 ## 6. Historical/reference material
+
+歷史 canonical record 已核定為一筆一目錄：
+
+```text
+past/<system>/clean/<reference_id>/
+├── manifest.json          # 必有；來源、hash、generation、mapping、conflict、unresolved
+├── raw.csv                # 有 observation 時才有；一個 observation 一列
+├── context.csv            # 有 Case/run/range/setup/instrument context 時才有
+└── report.docx            # 有合適來源或核准轉換時才有
+```
+
+`raw.csv` 以 `run_id`、`point_id`、`repeat_index` 保留量測層級；必要時加 `setup_id`、`mode`、`date`。`context.csv` 固定為 scoped long form：`scope_type,scope_id,key,value,unit,note,source`。E05、E07、E27 的 RAW 欄位依各自 `clean-schema.md` 定義，不建立萬用 schema。缺少 raw/context/report 合法，並由 manifest 明記；未知格式或欄位必須 fail／unresolved，不以成功率換取 silent data loss。
+
+完整 cross-system invariant 與 system schema 分別見 `past/canonical-format.md`、`past/E05/clean-schema.md`、`past/E07/clean-schema.md`、`past/E27/clean-schema.md`。
 
 來源可為前一個 managed Case，或 `past/<system>/source/` 中的 legacy item。使用者選定後，raw data 與 report 必須複製到當前 Case，不能只記外部路徑：
 
