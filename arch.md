@@ -95,16 +95,13 @@ Runtime data 固定放在 repository-local `data/`，方便人工檢查，但整
 │   ├── E05/<case_id>/
 │   ├── E07/<case_id>/
 │   └── E27/<case_id>/
-├── references/
-│   ├── E05/
-│   ├── E07/
-│   └── E27/
 └── index/                 # 真正建立索引時才出現
 ```
 
 - `cases/`：本 application 正式管理的校正案件。
-- `references/`：application 出現以前的歷史材料，或另行維護的歷史來源／archive。
 - `staging/`：OCR 臨時工作資料；成功建案或放棄後清除，不是正式 Case 資料。
+- `past/<system>/source/`：application 出現以前的歷史原始材料；位於 runtime `data/` 之外，且永遠唯讀。
+- `past/<system>/clean/`：只放經審核同意的 canonical cleaned output；目前為空。
 - historical reference 不會自動變成 Case，也不為了套入 Case model 而製造假 Case。
 
 成熟 Case 的概念結構：
@@ -128,7 +125,7 @@ cases/<system>/<case_id>/
 
 ## 6. Historical/reference material
 
-來源可為前一個 managed Case，或 `references/<system>/` 中的 legacy item。使用者選定後，raw data 與 report 必須複製到當前 Case，不能只記外部路徑：
+來源可為前一個 managed Case，或 `past/<system>/source/` 中的 legacy item。使用者選定後，raw data 與 report 必須複製到當前 Case，不能只記外部路徑：
 
 ```text
 historical source
@@ -136,7 +133,7 @@ historical source
 current Case/reference/
 ```
 
-Case-local `reference/` 是該案件實際採用的 immutable snapshot；global `references/` 是 archive/source。不得原地修改 `reference/` 內檔案。沒有歷史材料時 Case 仍須可用，且建立後也能稍後選擇 reference。
+Case-local `reference/` 是該案件實際採用的 immutable snapshot；`past/*/source/` 是唯讀 archive/source。不得原地修改兩者內的檔案。沒有歷史材料時 Case 仍須可用，且建立後也能稍後選擇 reference。不另建重複的 global `data/references/` archive。
 
 `reference/meta.json` 只保存必要 provenance，例如：
 
@@ -234,6 +231,6 @@ current report 未來可填 current customer、DUT、report number、calibration
 
 ### 穩定目標但尚未完成
 
-- references archive、Case-local reference snapshot。
+- historical source selection 與 Case-local reference snapshot。
 - canonical measurement format、measurement workspace、calculation、uncertainty 與 report generation。
 - `calculation.json`。

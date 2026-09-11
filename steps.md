@@ -39,11 +39,21 @@ Case 實體改按 system 分組為 `<data_root>/cases/<system>/<case_id>/`，不
 
 **Complete when:** manual/OCR 兩條路徑都先選 system；儲存後可從正確 system History 重新開啟 workspace；safe deletion 通過測試。
 
-實作與自動測試已完成；待使用者依實際桌面流程驗收後，才將本 Step 標為 DONE 並推進 Step 2。
+實作與自動測試已完成；待使用者依實際桌面流程驗收後，才將本 Step 標為 DONE。
+
+## Data preparation — Historical schema audit
+
+**Status: NEXT**
+
+在實作 reference import 或 canonical format 前，先唯讀審查 E05／E07／E27 的代表性 `past/<system>/source/` 真實檔案，辨識結構世代、RAW、Case／環境／setup、system／calculation config、derived 及 unresolved 欄位。特別查明 E05 客戶儀器資訊來源與 E07 burden／frequency／range 的層級。
+
+本任務只產生審查結果；審核前不 batch-clean，不實作 measurement、uncertainty 或 report generation。
+
+**Complete when:** 三系統的代表性結構、欄位分類、report-only 資訊、未解問題，以及三檔命名提案是否足夠均有可人工審閱的記錄。
 
 ## Step 2 — Historical/reference import and Case snapshot
 
-**Status: NEXT**
+**Status: AFTER AUDIT**
 
 支援來源：previous managed Case，以及 imported legacy reference。使用者選定後：
 
